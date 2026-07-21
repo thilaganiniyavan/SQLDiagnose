@@ -1,0 +1,38 @@
+[
+    {
+        "question": "List all department names",
+        "generated_sql": "SELECT name, name FROM departments WHERE salary > (SELECT department.dept_id FROM departments WHERE department.dept_id IN (SELECT dept_id FROM departments WHERE department.name = 'Dentiary')",
+        "generated_confidence": 0.8649293451059249,
+        "predicted_class": "PERMISSION_DENIED",
+        "validation_confidence": 0.802355170249939,
+        "repaired_sql": "SELECT name, name FROM departments WHERE salary > (SELECT department.dept_id FROM departments WHERE department.dept_id IN (SELECT dept_id FROM departments WHERE department.name = 'Dentiary')",
+        "suggested_fix": "Inspect SQL aggregation and join syntax."
+    },
+    {
+        "question": "Find names of employees earning more than 50000",
+        "generated_sql": "SELECT name FROM employees WHERE salary > 50000",
+        "generated_confidence": 0.9870463334597074,
+        "predicted_class": "PERMISSION_DENIED",
+        "validation_confidence": 0.9816119074821472,
+        "repaired_sql": "SELECT name FROM employees WHERE salary > 50000",
+        "suggested_fix": "Inspect SQL aggregation and join syntax."
+    },
+    {
+        "question": "Get the maximum budget across all departments",
+        "generated_sql": "SELECT department, MAX(budget) FROM departments GROUP BY department",
+        "generated_confidence": 0.9933749625557348,
+        "predicted_class": "CORRECT",
+        "validation_confidence": 0.9729241132736206,
+        "repaired_sql": null,
+        "suggested_fix": null
+    },
+    {
+        "question": "Show department IDs and total salary for each department",
+        "generated_sql": "SELECT department, SUM(salary) FROM employees GROUP BY department",
+        "generated_confidence": 0.9577713757753372,
+        "predicted_class": "CORRECT",
+        "validation_confidence": 0.9778644442558289,
+        "repaired_sql": null,
+        "suggested_fix": null
+    }
+]

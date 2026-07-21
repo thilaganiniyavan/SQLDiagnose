@@ -17,7 +17,9 @@ from .schemas import (
     BatchRequest,
     BatchResponse,
     HealthResponse,
-    MetricsResponse
+    MetricsResponse,
+    SQLGenerationRequest,
+    SQLGenerationResponse
 )
 
 router = APIRouter()
@@ -258,3 +260,103 @@ async def get_metrics(request: Request):
         error_class_counts=request.app.state.error_class_counts,
         avg_inference_time_ms=avg_inference
     )
+
+@router.post("/generate_sql", response_model=SQLGenerationResponse, summary="Translate Natural Language to SQL and Validate")
+async def generate_sql_endpoint(request: Request, body: SQLGenerationRequest):
+    """
+    Generates SQL from a natural language question and validates it using the classifier.
+    If classification predicts an error, it passes the query to the repair engine.
+    """
+    generator_service = getattr(request.app.state, "generator_service", None)
+    if not generator_service:
+        try:
+            from models.generator import SQLGeneratorService
+            generator_service = SQLGeneratorService()
+            request.app.state.generator_service = generator_service
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"SQL Generator service initialization error: {str(e)}")
+            
+    classifier = getattr(request.app.state, "classifier", None)
+    tokenizer = getattr(request.app.state, "tokenizer", None)
+    repair_engine = getattr(request.app.state, "repair_engine", None)
+        
+    # 1. Run local Text-to-SQL generation
+    try:
+        gen_result = generator_service.generate_sql(
+            question=body.question,
+            schema=body.database_schema,
+            confidence_threshold=body.confidence_threshold or 0.5
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SQL Generation failed: {str(e)}")
+        
+    generated_sql = gen_result["generated_sql"]
+    confidence = gen_result["confidence"]
+    alternatives = gen_result["alternatives"]
+    warning = gen_result["warning"]
+    inference_time_ms = gen_result["inference_time_ms"]
+    
+    # 2. Run generated query through the validation sequence
+    if not classifier or not tokenizer:
+         raise HTTPException(status_code=500, detail="Classifier or tokenizer is not loaded.")
+         
+    inputs = tokenizer(generated_sql, return_tensors="pt")
+    device = next(classifier.model.parameters()).device
+    tokenized_inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+    
+    try:
+        probs = classifier.predict(tokenized_inputs)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Validation inference failed: {str(e)}")
+        
+    pred_idx = int(torch.argmax(torch.tensor(probs)).item())
+    pred_class_str = CLASS_NAMES[pred_idx]
+    is_error = (pred_idx != 0)
+    
+    probs_list = [
+        ClassProbability(class_name=CLASS_NAMES[idx], probability=float(probs[idx]))
+        for idx in range(len(CLASS_NAMES))
+    ]
+    
+    validation_payload = {
+        "is_error": is_error,
+        "predicted_class": pred_class_str,
+        "confidence": float(probs[pred_idx]),
+        "probabilities": [p.dict() for p in probs_list]
+    }
+    
+    # 3. If there is an error, invoke the repair engine
+    repaired_sql = None
+    explanation_data = None
+    
+    if is_error and repair_engine:
+        try:
+            repair_result = repair_engine.repair(
+                query=generated_sql,
+                predicted_class=pred_idx,
+                confidence=float(probs[pred_idx]),
+                schema=body.database_schema
+            )
+            repaired_sql = repair_result["corrected_query"]
+            explanation_data = {
+                "explanation": repair_result["explanation"],
+                "suggested_correction": repair_result["suggested_correction"]
+            }
+        except Exception as e:
+            explanation_data = {"error": f"Repair execution failed: {str(e)}"}
+            
+    # Update global metrics for predictions
+    request.app.state.total_predictions += 1
+    request.app.state.error_class_counts[pred_class_str] += 1
+    
+    return SQLGenerationResponse(
+        generated_sql=generated_sql,
+        confidence=confidence,
+        validation=validation_payload,
+        repaired_sql=repaired_sql,
+        explanation=explanation_data,
+        inference_time_ms=inference_time_ms,
+        warning=warning,
+        alternatives=alternatives
+    )
+

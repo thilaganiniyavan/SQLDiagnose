@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from models.classifier import TransformerSQLClassifier
+from models.generator import SQLGeneratorService
 from repair.repair_engine import SQLRepairEngine
 from transformers import AutoTokenizer
 from .routes import router
@@ -152,6 +153,7 @@ class SQLClassifierApp:
         self.app.state.classifier = classifier
         self.app.state.tokenizer = tokenizer
         self.app.state.repair_engine = SQLRepairEngine()
+        self.app.state.generator_service = SQLGeneratorService(device=device_target)
         
         # Initialize Metrics counters
         self.app.state.total_predictions = 0

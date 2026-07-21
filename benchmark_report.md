@@ -31,9 +31,9 @@ This report presents the validation logs, per-class errors, baseline comparisons
 
 | Model Backbone | Accuracy | Macro F1 | Average Latency | Model Weight Size |
 | :--- | :--- | :--- | :--- | :--- |
-| TF-IDF + Logistic Regression | 69.3% | 66.4% | 0.044 ms | 0.5 MB |
-| Random Forest | 61.1% | 57.4% | 0.149 ms | 15.0 MB |
-| XGBoost | 55.2% | 52.5% | 0.795 ms | 8.0 MB |
+| TF-IDF + Logistic Regression | 69.3% | 66.4% | 0.015 ms | 0.5 MB |
+| Random Forest | 61.1% | 57.4% | 0.031 ms | 15.0 MB |
+| XGBoost | 55.2% | 52.5% | 0.245 ms | 8.0 MB |
 | **DistilBERT (Fine-Tuned)** | 76.2% | 73.8% | 12.0 ms | 255.4 MB |
 | **BERT (Fine-Tuned)** | 81.4% | 79.8% | 18.0 ms | 417.7 MB |
 | **RoBERTa (Fine-Tuned)** | 84.5% | 83.1% | 18.0 ms | 475.5 MB |
@@ -45,9 +45,9 @@ This report presents the validation logs, per-class errors, baseline comparisons
 
 | Stress Scenario | Status | Telemetry Latency | Output Sample |
 | :--- | :--- | :--- | :--- |
-| Extremely Long SQL Query | **Success** | 3.45 ms | `SELECT col0, col1, col2, col3,...` |
+| Extremely Long SQL Query | **Success** | 1.70 ms | `SELECT col0, col1, col2, col3,...` |
 | Invalid SQL Syntax | **Success** | 0.00 ms | `!!! SELECT select "FROM" FROM ...` |
-| Random SQL Noise | **Success** | 0.70 ms | `SELECT * FROM users @#$@#%@#% ...` |
+| Random SQL Noise | **Success** | 0.00 ms | `SELECT * FROM users @#$@#%@#% ...` |
 | Unknown SQL Dialect | **Success** | 0.00 ms | `SELECT FIRST, 10, name FROM us...` |
 | Mixed SQL Dialect | **Success** | 0.00 ms | `SELECT TOP, 10, name FROM user...` |
 | Empty Query | **Success** | 0.00 ms | `...` |
@@ -59,12 +59,12 @@ This report presents the validation logs, per-class errors, baseline comparisons
 
 | Batch Size | Mean Latency | P50 Latency | P95 Latency | P99 Latency | Throughput (QPS) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1** | 33.36 ms | 29.00 ms | 63.04 ms | 63.04 ms | 29.97 QPS |
-| **8** | 32.22 ms | 32.00 ms | 35.00 ms | 35.17 ms | 248.30 QPS |
-| **16** | 29.87 ms | 29.77 ms | 31.92 ms | 32.58 ms | 535.73 QPS |
-| **32** | 40.85 ms | 40.65 ms | 41.84 ms | 46.41 ms | 783.42 QPS |
-| **64** | 72.20 ms | 72.04 ms | 73.15 ms | 73.28 ms | 886.39 QPS |
-| **128** | 171.69 ms | 171.44 ms | 173.81 ms | 174.50 ms | 745.52 QPS |
+| **1** | 8.51 ms | 8.63 ms | 9.99 ms | 10.00 ms | 117.51 QPS |
+| **8** | 12.80 ms | 12.78 ms | 14.55 ms | 14.92 ms | 624.77 QPS |
+| **16** | 21.47 ms | 21.07 ms | 22.68 ms | 22.86 ms | 745.06 QPS |
+| **32** | 38.16 ms | 38.09 ms | 39.04 ms | 39.73 ms | 838.53 QPS |
+| **64** | 70.43 ms | 70.41 ms | 71.11 ms | 71.18 ms | 908.64 QPS |
+| **128** | 169.59 ms | 169.47 ms | 170.23 ms | 171.29 ms | 754.77 QPS |
 
 ---
 

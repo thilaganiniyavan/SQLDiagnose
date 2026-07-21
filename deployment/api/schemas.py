@@ -51,3 +51,19 @@ class MetricsResponse(BaseModel):
     total_repairs: int = Field(..., description="Cumulative number of query auto-repairs executed.")
     error_class_counts: Dict[str, int] = Field(..., description="Breakdown of predictions across categories.")
     avg_inference_time_ms: float = Field(..., description="Average classification inference latency in milliseconds.")
+
+class SQLGenerationRequest(BaseModel):
+    question: str = Field(..., description="The natural language question to translate to SQL.")
+    database_schema: Dict[str, Any] = Field(..., description="The active database schema catalog.")
+    confidence_threshold: Optional[float] = Field(0.5, description="Threshold below which warning and alternatives are generated.")
+
+class SQLGenerationResponse(BaseModel):
+    generated_sql: str = Field(..., description="The generated SQL query.")
+    confidence: float = Field(..., description="The confidence score of the generation (0.0 to 1.0).")
+    validation: Dict[str, Any] = Field(..., description="Validation metadata from the classifier (is_error, predicted_class, etc.).")
+    repaired_sql: Optional[str] = Field(None, description="The auto-corrected SQL query if errors were detected and repaired.")
+    explanation: Optional[Dict[str, Any]] = Field(None, description="Attributions and repair explanations.")
+    inference_time_ms: float = Field(..., description="Generation inference latency in milliseconds.")
+    warning: Optional[str] = Field(None, description="Warning if confidence is below threshold.")
+    alternatives: Optional[List[str]] = Field(None, description="Top alternative SQL candidates if confidence is low.")
+

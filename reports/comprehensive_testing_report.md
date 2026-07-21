@@ -24,7 +24,7 @@ Below is the verification log status for each subsystem:
 ## 2. Telemetry & Performance Benchmarks
 
 Performance telemetry was profiled on:
-- **Device**: `cuda`
+- **Device**: `cpu`
 - **CPU Processor**: `16-core`
 
 ### 2.1 Latency Performance Percentiles
@@ -32,28 +32,28 @@ Average and tail latencies for sequential classification passes:
 
 | Metric Percentile | Latency (ms) |
 | :--- | :--- |
-| **Mean Latency** | 28.42 ms |
-| **Median (P50)** | 29.00 ms |
-| **P90 Latency** | 30.41 ms |
-| **P95 Latency** | 30.52 ms |
-| **Tail Latency (P99 / Max)** | 30.97 ms |
+| **Mean Latency** | 18.18 ms |
+| **Median (P50)** | 17.00 ms |
+| **P90 Latency** | 23.00 ms |
+| **P95 Latency** | 23.01 ms |
+| **Tail Latency (P99 / Max)** | 24.00 ms |
 
 ### 2.2 Memory Footprint (Delta)
 System RAM and CUDA VRAM consumed during model state loading:
 
 | System Memory Target | Delta Allocated (MB) |
 | :--- | :--- |
-| **Host System RAM** | 70.69 MB |
-| **CUDA GPU VRAM** | 476.75 MB |
-| **Model Weight Loading Time** | 3680.92 ms |
+| **Host System RAM** | 28.70 MB |
+| **CUDA GPU VRAM** | 0.00 MB |
+| **Model Weight Loading Time** | 3256.46 ms |
 
 ### 2.3 Execution Throughput
 Throughput measurements for sequence parsing under consecutive sequential and padded batch contexts:
 
 | Execution Context | Throughput Rate (Queries/Sec) |
 | :--- | :--- |
-| **Sequential Inference (Throughput)** | 34.50 QPS |
-| **Batch Inference (Throughput - BS=16)** | 438.90 QPS |
+| **Sequential Inference (Throughput)** | 54.23 QPS |
+| **Batch Inference (Throughput - BS=16)** | 92.34 QPS |
 
 ---
 
