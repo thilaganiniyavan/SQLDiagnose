@@ -1,0 +1,26 @@
+# training_config.yaml
+# Hyperparameters and settings for model training
+
+training:
+  epochs: 10
+  batch_size: 16
+  eval_batch_size: 32
+  learning_rate: 3e-5
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  seed: 42
+  early_stopping:
+    patience: 3
+    min_delta: 0.001
+
+optimizer:
+  name: "AdamW"
+  lr_scheduler: "linear"
+  warmup_ratio: 0.1
+
+logging:
+  logging_steps: 100
+  evaluation_steps: 500
+  save_steps: 1000
+  checkpoint_dir: "experiments/checkpoints"
+  tensorboard_log_dir: "experiments/runs"

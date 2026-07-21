@@ -1,0 +1,44 @@
+{
+  "citation": "",
+  "description": "",
+  "features": {
+    "query_id": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "database_name": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "database_schema": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "sql_query": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "is_valid": {
+      "dtype": "bool",
+      "_type": "Value"
+    },
+    "error_type": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "difficulty": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "source_dataset": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "metadata": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": ""
+}

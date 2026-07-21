@@ -1,0 +1,20 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Checkpoints and models (too large for GitHub)
+experiments/
+checkpoints/
+logs/
+reports/uvicorn_test.log
+
+# Binary model files
+*.pt
+*.bin
+*.safetensors
+*.onnx
+
+# OS files
+.DS_Store
+Thumbs.db

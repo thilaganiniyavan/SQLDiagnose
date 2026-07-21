@@ -1,0 +1,19 @@
+# model_config.yaml
+# Architecture config for the SQL classification transformer model
+
+model:
+  backbone: "roberta-base"            # Transformer model checkpoint from HuggingFace
+  num_labels: 8                       # Number of SQL error classes (including correct query class)
+  max_sequence_length: 256            # Tokenization cutoff limit
+  dropout_rate: 0.1
+  classifier_hidden_dim: 768
+
+classes:
+  0: "CORRECT"                        # No error found
+  1: "SYNTAX_ERROR"                   # Incorrect SQL grammar
+  2: "TABLE_NOT_FOUND"                # Reference to non-existent tables
+  3: "COLUMN_NOT_FOUND"               # Reference to non-existent columns
+  4: "DATA_TYPE_MISMATCH"             # Comparison or assignment type mismatch
+  5: "AMBIGUOUS_COLUMN"               # Reference to a column present in multiple joined tables
+  6: "PERMISSION_DENIED"              # Insufficient table/schema level authorization
+  7: "SEMANTIC_VIOLATION"             # General semantic failures (e.g., aggregate in WHERE clause)
