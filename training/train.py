@@ -4,6 +4,8 @@
 #   python -m training.train                                  # defaults from configs/training_config.yaml
 #   python -m training.train --model microsoft/codebert-base --output-dir models/checkpoints/codebert
 #   python -m training.train --resume                         # continue an interrupted run
+#   python -m training.train --init-from models/checkpoints/codeberta-small/best \
+#       --output-dir models/checkpoints/codeberta-small-ft --epochs 2 --lr 2e-5   # further fine-tuning
 #
 # Works on CPU (dynamic padding + length-grouped batches keep it tractable) and on CUDA (AMP).
 
@@ -125,6 +127,8 @@ def parse_args():
     ap.add_argument("--threads", type=int, default=t.get("cpu_threads", 0), help="CPU threads (0 = torch default)")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--resume", action="store_true", help="resume from <output-dir>/last")
+    ap.add_argument("--init-from", type=Path, default=None,
+                    help="start from the weights of a fine-tuned checkpoint (new optimizer and schedule)")
     return ap.parse_args()
 
 
@@ -143,6 +147,11 @@ def main():
         clf = SQLErrorClassifier.from_pretrained(str(last_dir), device=args.device)
         resume_state = torch.load(last_dir / "trainer_state.pt", map_location="cpu", weights_only=False)
         print(f"Resuming from step {resume_state['step']}")
+    elif args.init_from:
+        clf = SQLErrorClassifier.from_pretrained(str(args.init_from), device=args.device)
+        meta = json.loads((args.init_from / "sqldiagnose_labels.json").read_text())
+        args.model = meta.get("backbone", args.model)
+        print(f"Initialised from {args.init_from} ({args.model})")
     else:
         clf = SQLErrorClassifier.from_base(args.model, MODEL_CLASSES, args.max_length, args.device)
     model, tok = clf.model, clf.tokenizer
@@ -163,7 +172,7 @@ def main():
     print(f"train={len(train)} validation={len(val)} | tokens mean={np.mean(lengths):.0f} "
           f"p95={np.percentile(lengths, 95):.0f} max={max(lengths)} | device={device} | model={args.model}")
 
-    steps_per_epoch = math.ceil(len(train) / args.batch_size / args.grad_accum)
+    steps_per_epoch = max(1, math.ceil(len(train) / args.batch_size) // args.grad_accum)
     total_steps = int(steps_per_epoch * args.epochs)
     optimizer = configure_optimizers(model, args.lr, args.weight_decay)
     scheduler = get_linear_schedule_with_warmup(optimizer, int(total_steps * args.warmup_ratio), total_steps)
@@ -171,7 +180,7 @@ def main():
     use_amp = device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
-    step, best_f1, stale, epoch_start = 0, -1.0, 0, 0
+    step, best_f1, stale, epoch_start, last_eval = 0, -1.0, 0, 0, 0
     rng = random.Random(args.seed)
     if resume_state:
         optimizer.load_state_dict(resume_state["optimizer"])
@@ -228,6 +237,7 @@ def main():
                       f"lr {scheduler.get_last_lr()[0]:.2e} elapsed {el / 60:.1f}m eta {eta / 60:.1f}m", flush=True)
 
             if step % args.eval_steps == 0 or step == total_steps:
+                last_eval = step
                 metrics = evaluate(model, val, tok.pad_token_id, device)
                 train_loss = running / max(running_n, 1)
                 running, running_n = 0.0, 0
@@ -253,6 +263,17 @@ def main():
         if step >= total_steps or stop:
             break
 
+    if step != last_eval and not stop:
+        # the final steps were never evaluated (e.g. total_steps not reached exactly): do it now
+        metrics = evaluate(model, val, tok.pad_token_id, device)
+        log.writerow([step, epoch + 1, f"{running / max(running_n, 1):.4f}", f"{metrics['loss']:.4f}",
+                      f"{metrics['accuracy']:.4f}", f"{metrics['macro_f1']:.4f}",
+                      f"{scheduler.get_last_lr()[0]:.2e}", f"{time.time() - t0:.0f}"])
+        print(f"  [eval] final step {step}: macro_f1 {metrics['macro_f1']:.4f}", flush=True)
+        if metrics["macro_f1"] > best_f1 + 1e-4:
+            best_f1 = metrics["macro_f1"]
+            clf.save_pretrained(str(best_dir), {"backbone": args.model, "step": step, "validation": metrics})
+        checkpoint(epoch, len(batches))
     log_f.close()
     summary = {"backbone": args.model, "best_validation_macro_f1": best_f1, "steps": step,
                "train_samples": len(train), "epochs": args.epochs, "batch_size": args.batch_size,
