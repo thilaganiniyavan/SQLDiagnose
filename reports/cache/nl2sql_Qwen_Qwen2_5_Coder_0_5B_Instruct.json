@@ -1,0 +1,75 @@
+{
+ "n": 150,
+ "raw_validity": 0.54,
+ "selected_validity": 0.74,
+ "final_validity": 0.88,
+ "raw_execution_accuracy": 0.4,
+ "selected_execution_accuracy": 0.49333333333333335,
+ "final_execution_accuracy": 0.5466666666666666,
+ "mean_generation_ms": 47572.05199999999,
+ "status_counts": {
+  "valid": 81,
+  "invalid": 18,
+  "valid_alternative": 30,
+  "repaired": 21
+ },
+ "invalid_raw_examples": [
+  {
+   "question": "What is the TV Channel that shows the cartoon \"The Rise of the Blue Beetle!\"? List the TV Channel's series name.",
+   "raw": "SELECT T2.series_name FROM TV_Channel AS T1 JOIN TV_series AS T2 ON T1.id = T2.Channel WHERE T1.Title = 'The Rise of the Blue Beetle!'",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT T2.series_name FROM TV_Channel AS T1 JOIN TV_series AS T2 ON T1.id = T2.Channel WHERE T1.Title = 'The Rise of the Blue Beetle!'",
+   "status": "invalid"
+  },
+  {
+   "question": "How many car models are produced by each maker ? Only list the count and the maker full name .",
+   "raw": "SELECT COUNT(*) , FullName FROM car_names GROUP BY FullName",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT COUNT(Id), FullName FROM car_makers GROUP BY FullName",
+   "status": "valid_alternative"
+  },
+  {
+   "question": "What are the names of players who won in both 2013 and 2016?",
+   "raw": "SELECT T1.first_name, T1.last_name FROM players AS T1 INNER JOIN rankings AS T2 ON T1.player_id = T2.player_id WHERE T2.year = 2013 OR T2.year = 2016",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT T1.first_name, T1.last_name FROM players AS T1 INNER JOIN rankings AS T2 ON T1.player_id = T2.player_id WHERE T2.year = 2013 OR T2.year = 2016",
+   "status": "invalid"
+  },
+  {
+   "question": "What is the number of carsw ith over 6 cylinders?",
+   "raw": "SELECT COUNT(*) FROM car_names WHERE Cylinders > 6",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT COUNT(*) FROM car_names WHERE Cylinders > 6",
+   "status": "invalid"
+  },
+  {
+   "question": "What are the countries that have cartoons on TV that were written by Todd Casey?",
+   "raw": "SELECT T2.Country FROM Cartoon AS T1 INNER JOIN TV_series AS T2 ON T1.id = T2.Channel WHERE T1.Directed_by = 'Todd Casey'",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT T2.Country FROM Cartoon AS T1 INNER JOIN TV_series AS T2 ON T1.id = T2.Channel WHERE T1.Directed_by = 'Todd Casey'",
+   "status": "invalid"
+  },
+  {
+   "question": "What are the ids of documents that have 2 or more paragraphs?",
+   "raw": "SELECT T2.Document_ID FROM Documents AS T1 INNER JOIN Paragraphs AS T2 ON T1.Template_ID = T2.Template_ID GROUP BY T1.Document_ID HAVING COUNT(T2.Paragraph_ID) >= 2",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT DISTINCT T1.Document_ID FROM Documents AS T1 INNER JOIN Paragraphs AS T2 ON T1.Document_ID = T2.Document_ID GROUP BY T2.Document_ID HAVING COUNT(*) >= 2",
+   "status": "valid_alternative"
+  },
+  {
+   "question": "What are the different models created by either the car maker General Motors or weighed more than 3500?",
+   "raw": "SELECT DISTINCT T2.Model FROM car_names AS T1 INNER JOIN model_list AS T2 ON T1.MakeId = T2.Make WHERE T1.Make = 'General Motors' OR T1.Weight > 3500",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT DISTINCT T2.Model FROM car_names AS T1 INNER JOIN model_list AS T2 ON T1.MakeId = T2.Make WHERE T1.Make = 'General Motors' OR T1.Weight > 3500",
+   "status": "invalid"
+  },
+  {
+   "question": "Which states have both owners and professionals living there?",
+   "raw": "SELECT DISTINCT T2.state FROM Owners AS T1 JOIN Dogs AS T2 ON T1.owner_id = T2.owner_id",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT DISTINCT T1.state FROM Owners AS T1 JOIN Dogs AS T2 ON T1.owner_id = T2.owner_id",
+   "status": "repaired"
+  }
+ ],
+ "generator": "Qwen/Qwen2.5-Coder-0.5B-Instruct"
+}
