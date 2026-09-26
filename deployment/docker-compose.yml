@@ -1,0 +1,16 @@
+# docker compose -f deployment/docker-compose.yml up --build
+services:
+  api:
+    build: { context: .., dockerfile: deployment/Dockerfile }
+    ports: ["8000:8000"]
+    volumes:
+      - hf-cache:/app/.cache/huggingface     # keeps the NL2SQL generator download between restarts
+  ui:
+    build: { context: .., dockerfile: deployment/Dockerfile }
+    command: ["python", "-m", "streamlit", "run", "frontend/app.py", "--server.address", "0.0.0.0"]
+    environment:
+      SQLDIAGNOSE_API_URL: http://api:8000/api/v1
+    ports: ["8501:8501"]
+    depends_on: [api]
+volumes:
+  hf-cache:

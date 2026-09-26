@@ -1,176 +1,160 @@
 # main.py
 # Clean Architecture: Frameworks & Drivers
-# FastAPI Application Entrypoint
+# FastAPI application: configuration, model loading and shared state.
+#
+#   python -m uvicorn deployment.api.main:app --port 8000
+
+import json
+import logging
+import os
+import threading
+import time
+from collections import Counter
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 import yaml
-import logging
-import torch
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from models.classifier import TransformerSQLClassifier
-from models.generator import SQLGeneratorService
-from repair.repair_engine import SQLRepairEngine
-from transformers import AutoTokenizer
+
+from models.domain.labels import CLASS_NAMES
+from services.diagnosis import DiagnosisService
+from services.nl2sql import NL2SQLService
+from services.schema_registry import SchemaRegistry
 from .routes import router
 
-# Set up logging format
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] %(levelname)s [%(name)s:%(filename)s:%(lineno)d] - %(message)s"
-)
-logger = logging.getLogger("api_server")
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("sqldiagnose.api")
 
-class SQLClassifierApp:
-    """
-    Manages API lifecycle events (e.g. model loading at startup) and mounts middlewares.
-    """
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = PROJECT_ROOT / "configs" / "api_config.yaml"
+
+
+def load_config(path: Path = CONFIG_PATH) -> Dict[str, Any]:
+    cfg = yaml.safe_load(path.read_text()) if path.exists() else {}
+    api = cfg.setdefault("api", {})
+    api["model_dir"] = os.environ.get("SQLDIAGNOSE_MODEL_DIR", api.get("model_dir", ""))
+    api["device"] = os.environ.get("SQLDIAGNOSE_DEVICE", api.get("device", "cpu"))
+    api["generator"] = os.environ.get("SQLDIAGNOSE_GENERATOR", api.get("generator", ""))
+    return cfg
+
+
+class Metrics:
     def __init__(self):
-        self.app = FastAPI()
-        self.config = self.load_config()
-        self.initialize_app()
+        self._lock = threading.Lock()
+        self.started = time.time()
+        self.requests: Counter = Counter()
+        self.classes: Counter = Counter({c: 0 for c in CLASS_NAMES})
+        self.diagnoses = 0
+        self.latency_total = 0.0
+        self.repairs = 0
+        self.repairs_ok = 0
 
-    def load_config(self) -> dict:
-        """
-        Loads the yaml api_config.yaml file from configs/.
-        """
-        project_root = Path(__file__).resolve().parents[2]
-        config_path = project_root / "configs" / "api_config.yaml"
-        
-        if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f)
-        else:
-            logger.warning(f"Configuration file not found at {config_path}. Using hardcoded API defaults.")
-            return {
-                "server": {"host": "0.0.0.0", "port": 8000},
-                "app": {
-                    "title": "SQL Error Classifier API",
-                    "description": "SQL Error Classification REST endpoint.",
-                    "version": "1.0.0",
-                    "model_weights_path": "roberta-base",
-                    "device": "cpu",
-                    "enable_cors": True,
-                    "allowed_origins": ["*"]
-                }
-            }
+    def count(self, endpoint: str):
+        with self._lock:
+            self.requests[endpoint] += 1
 
-    def initialize_app(self):
-        """
-        Applies configuration settings, CORS mappings, and routers to the FastAPI app.
-        """
-        app_cfg = self.config.get("app", {})
-        
-        # Configure Swagger Metadata
-        self.app.title = app_cfg.get("title", "SQL Error Classifier API")
-        self.app.description = app_cfg.get("description", "")
-        self.app.version = app_cfg.get("version", "1.0.0")
-        
-        # Configure CORS
-        if app_cfg.get("enable_cors", True):
-            self.app.add_middleware(
-                CORSMiddleware,
-                allow_origins=app_cfg.get("allowed_origins", ["*"]),
-                allow_credentials=True,
-                allow_methods=["*"],
-                allow_headers=["*"],
-            )
-            
-        # Bind lifecycle events
-        @self.app.on_event("startup")
-        def startup_event():
-            self.load_model_artifacts()
-            
-        # Register routes
-        self.app.include_router(router)
+    def record_diagnosis(self, cls: str, latency_ms: float):
+        with self._lock:
+            self.diagnoses += 1
+            self.latency_total += latency_ms
+            self.classes[cls] += 1
 
-    def load_model_artifacts(self):
-        """
-        Pre-loads the transformer checkpoints and tokenizer on startup.
-        Uses a robust fallback to 'roberta-base' if custom checkpoint path doesn't exist.
-        Supports loading custom PyTorch .pt checkpoints via state dictionary matching.
-        """
-        app_cfg = self.config.get("app", {})
-        weights_path = app_cfg.get("model_weights_path", "experiments/checkpoints/best_model")
-        device_target = app_cfg.get("device", "cpu")
-        
-        logger.info(f"Checking for model weights at target path: {weights_path}")
-        
-        # Resolve CUDA availability
-        if device_target == "cuda" and not torch.cuda.is_available():
-            logger.warning("CUDA target requested but GPU not available. Falling back to CPU execution.")
-            device_target = "cpu"
-            
-        tokenizer = None
+    def record_repair(self, success: bool):
+        with self._lock:
+            self.repairs += 1
+            self.repairs_ok += int(success)
+
+    def snapshot(self) -> Dict[str, Any]:
+        with self._lock:
+            return {"uptime_s": round(time.time() - self.started, 1), "requests": dict(self.requests),
+                    "diagnoses": self.diagnoses, "repairs": self.repairs, "repairs_successful": self.repairs_ok,
+                    "mean_diagnosis_latency_ms": round(self.latency_total / self.diagnoses, 2) if self.diagnoses else 0.0,
+                    "class_counts": dict(self.classes)}
+
+
+class AppContext:
+    """Everything the route handlers share. Built once at startup."""
+
+    def __init__(self, cfg: Dict[str, Any], load_models: bool = True):
+        api = cfg.get("api", {})
+        self.version = api.get("version", "2.0.0")
+        self.device = api.get("device", "cpu")
+        self.max_batch = int(api.get("max_batch", 500))
+        self.enable_live_schema = bool(api.get("enable_live_schema_parsing", False))
+        self.generator_name = api.get("generator") or None
+        self.registry = SchemaRegistry()
+        self.metrics = Metrics()
+        self.model_info: Optional[Dict[str, Any]] = None
+        self.generator = None
+        self.generator_error: Optional[str] = None
+        self._gen_lock = threading.Lock()
+        self._nl2sql: Optional[NL2SQLService] = None
+
         classifier = None
-        
-        try:
-            # Check if it is a PyTorch checkpoint (.pt) file
-            if isinstance(weights_path, str) and weights_path.endswith(".pt") and Path(weights_path).exists():
-                logger.info(f"Loading custom state dict checkpoint from: {weights_path}")
-                base_model_name = "claudios/codebert-base"
-                
-                logger.info(f"Loading Tokenizer from: {base_model_name}")
-                tokenizer = AutoTokenizer.from_pretrained(base_model_name)
-                
-                logger.info(f"Instantiating base model framework for sequence classification: {base_model_name}")
-                classifier = TransformerSQLClassifier(model_name_or_path=base_model_name, num_labels=8)
-                
-                # Load state dict
-                state = torch.load(weights_path, map_location="cpu")
-                classifier.model.load_state_dict(state["model_state_dict"])
-                classifier.model.to(device_target)
-                logger.info(f"Custom model state dict successfully loaded on device: {device_target}")
-                
+        model_dir = api.get("model_dir")
+        if load_models and model_dir:
+            path = Path(model_dir)
+            path = path if path.is_absolute() else PROJECT_ROOT / path
+            if (path / "sqldiagnose_labels.json").exists():
+                if self.device == "cuda":
+                    import torch
+                    if not torch.cuda.is_available():
+                        logger.warning("CUDA requested but unavailable; using CPU.")
+                        self.device = "cpu"
+                from models.classifier import SQLErrorClassifier
+                classifier = SQLErrorClassifier.from_pretrained(str(path), device=self.device)
+                meta = json.loads((path / "sqldiagnose_labels.json").read_text())
+                self.model_info = {"path": str(path.relative_to(PROJECT_ROOT) if path.is_relative_to(PROJECT_ROOT) else path),
+                                   "backbone": meta.get("backbone"), "labels": classifier.labels,
+                                   "validation": meta.get("validation"), "parameters": classifier.num_parameters()}
+                logger.info("Classifier loaded from %s", path)
             else:
-                # Check if local path exists; if not, use roberta-base
-                resolved_weights = weights_path
-                if not Path(weights_path).exists() and weights_path != "roberta-base":
-                    logger.warning(f"Fine-tuned model checkpoint directory '{weights_path}' was not found.")
-                    logger.info("Falling back to pre-trained base model 'roberta-base' for API routing.")
-                    resolved_weights = "roberta-base"
-                    
-                logger.info(f"Loading Tokenizer from: {resolved_weights}")
-                tokenizer = AutoTokenizer.from_pretrained(resolved_weights)
-                
-                logger.info(f"Loading sequence classification model weights from: {resolved_weights}")
-                classifier = TransformerSQLClassifier(model_name_or_path=resolved_weights, num_labels=8)
-                classifier.model.to(device_target)
-                logger.info(f"Model successfully loaded on device: {device_target}")
-                
-        except Exception as e:
-            logger.error(f"Critical error loading model artifacts: {e}")
-            # Robust fallback to base roberta-base model
-            try:
-                logger.info("Triggering absolute emergency fallback to base 'roberta-base'...")
-                tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-                classifier = TransformerSQLClassifier(model_name_or_path="roberta-base", num_labels=8)
-                classifier.model.to(device_target)
-            except Exception as fallback_err:
-                logger.critical(f"Emergency fallback failed: {fallback_err}")
-                
-        # Store state on app context
-        self.app.state.classifier = classifier
-        self.app.state.tokenizer = tokenizer
-        self.app.state.repair_engine = SQLRepairEngine()
-        self.app.state.generator_service = SQLGeneratorService(device=device_target)
-        
-        # Initialize Metrics counters
-        self.app.state.total_predictions = 0
-        self.app.state.total_repairs = 0
-        self.app.state.total_inference_time_ms = 0.0
-        self.app.state.error_class_counts = {
-            "CORRECT": 0,
-            "SYNTAX_ERROR": 0,
-            "UNKNOWN_TABLE": 0,
-            "UNKNOWN_COLUMN": 0,
-            "DATATYPE_MISMATCH": 0,
-            "DUPLICATE_ALIAS": 0,
-            "PERMISSION_DENIED": 0,
-            "SEMANTIC_ERROR": 0
-        }
-        
-        logger.info("FastAPI initialization of ML model state and repair engine is complete.")
+                logger.warning("No classifier checkpoint at %s - running with the deterministic analyzer only. "
+                               "Train one with `python -m training.train`.", path)
+        self.diagnosis = DiagnosisService(classifier, model_threshold=float(api.get("model_threshold", 0.8)))
+        if load_models and api.get("load_generator_on_startup"):
+            self.nl2sql()
 
-# Expose app for uvicorn runner
-app = SQLClassifierApp().app
+    def nl2sql(self) -> Optional[NL2SQLService]:
+        """Loads the generator on first use (it is large and not every deployment needs it)."""
+        if self._nl2sql is not None or not self.generator_name:
+            return self._nl2sql
+        with self._gen_lock:
+            if self._nl2sql is None and self.generator_error is None:
+                try:
+                    from models.generator import T5SQLGenerator
+                    self.generator = T5SQLGenerator(self.generator_name, device=self.device)
+                    self._nl2sql = NL2SQLService(self.generator, self.diagnosis)
+                except Exception as e:                                    # network / disk errors
+                    self.generator_error = str(e)
+                    logger.error("Could not load generator %s: %s", self.generator_name, e)
+        return self._nl2sql
+
+
+def create_app(cfg: Optional[Dict[str, Any]] = None, load_models: bool = True) -> FastAPI:
+    cfg = cfg if cfg is not None else load_config()
+    api = cfg.get("api", {})
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        if not hasattr(app.state, "ctx"):
+            app.state.ctx = AppContext(cfg, load_models)
+        yield
+
+    app = FastAPI(title=api.get("title", "SQLDiagnose API"), version=api.get("version", "2.0.0"),
+                  description="Diagnose, explain and repair SQL queries; translate questions to verified SQL.",
+                  lifespan=lifespan)
+    app.add_middleware(CORSMiddleware, allow_origins=api.get("cors_origins", ["*"]),
+                       allow_methods=["*"], allow_headers=["*"])
+    app.include_router(router, prefix="/api/v1")
+
+    @app.get("/", include_in_schema=False)
+    def root():
+        return {"service": "SQLDiagnose", "docs": "/docs", "api": "/api/v1"}
+
+    return app
+
+
+app = create_app()

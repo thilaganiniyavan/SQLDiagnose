@@ -1,10 +1,10 @@
 [theme]
-primaryColor = "#feb24c"
+base = "dark"
+primaryColor = "#4f8ff7"
 backgroundColor = "#0f172a"
 secondaryBackgroundColor = "#1e293b"
-textColor = "#f8fafc"
+textColor = "#e2e8f0"
 font = "sans serif"
 
 [server]
 port = 8501
-enableCORS = true

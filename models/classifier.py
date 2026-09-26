@@ -1,111 +1,116 @@
 # classifier.py
 # Clean Architecture: Interface Adapter
-# Concrete implementation of the ISQLModel interface using HuggingFace & PyTorch.
+# Transformer sequence classifier for SQL errors (HuggingFace implementation of ISQLClassifier).
+#
+# Input format: the query and a compact serialisation of the schema are encoded as a text pair,
+#   <s> SQL </s></s> table: col type, ... | table2: ... </s>
+# truncating only the schema segment. Without the schema, table/column/type errors are not
+# decidable from the text, so the schema is part of the model input by design.
+
+import json
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
-import torch.nn as nn
-from typing import Dict, List, Any
-from pathlib import Path
-from transformers import AutoModelForSequenceClassification, AutoConfig
-from .domain.interfaces import ISQLModel
-from evaluation.explainability import explain_query
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-class TransformerSQLClassifier(ISQLModel):
-    """
-    Adapter class wrapping HuggingFace AutoModelForSequenceClassification 
-    to implement the domain model interface.
-    """
-    def __init__(self, model_name_or_path: str, num_labels: int, attention_dropout: float = None, hidden_dropout: float = None):
-        self.model_name_or_path = model_name_or_path
-        self.num_labels = num_labels
-        
-        try:
-            config = AutoConfig.from_pretrained(model_name_or_path)
-            if attention_dropout is not None:
-                config.attention_probs_dropout_prob = attention_dropout
-            if hidden_dropout is not None:
-                config.hidden_dropout_prob = hidden_dropout
-            config.num_labels = num_labels
-        except Exception:
-            config = None
+from analysis.schema import DatabaseSchema
+from .domain.entities import ModelPrediction
+from .domain.interfaces import ISQLClassifier
+from .domain.labels import MODEL_CLASSES
 
-        try:
-            if config is not None:
-                self.model = AutoModelForSequenceClassification.from_pretrained(
-                    model_name_or_path,
-                    config=config,
-                    attn_implementation="eager"
-                )
-            else:
-                self.model = AutoModelForSequenceClassification.from_pretrained(
-                    model_name_or_path,
-                    num_labels=num_labels,
-                    attn_implementation="eager"
-                )
-        except Exception:
-            if config is not None:
-                self.model = AutoModelForSequenceClassification.from_pretrained(
-                    model_name_or_path,
-                    config=config
-                )
-            else:
-                self.model = AutoModelForSequenceClassification.from_pretrained(
-                    model_name_or_path,
-                    num_labels=num_labels
-                )
+LABEL_FILE = "sqldiagnose_labels.json"
 
-    def predict(self, tokenized_inputs: Dict[str, Any]) -> List[float]:
-        """
-        Runs model inference forward pass. Returns class probability scores.
-        """
+
+def schema_text(query: str, schema: Optional[DatabaseSchema]) -> str:
+    return schema.serialize_for_model(query) if schema is not None and schema.tables else ""
+
+
+class SQLErrorClassifier(ISQLClassifier):
+    def __init__(self, model, tokenizer, labels: Sequence[str], max_length: int = 256, device: str = "cpu"):
+        self.model = model
+        self.tokenizer = tokenizer
+        self.labels = list(labels)
+        self.max_length = max_length
+        self.device = torch.device(device)
+        self.model.to(self.device)
         self.model.eval()
-        with torch.no_grad():
-            # Move inputs to device matching model
-            device = next(self.model.parameters()).device
-            inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in tokenized_inputs.items()}
-            
-            outputs = self.model(**inputs)
-            logits = outputs.logits
-            probs = torch.softmax(logits, dim=-1)
-            return probs.squeeze(0).tolist()
 
-    def predict_with_explanation(
-        self,
-        query: str,
-        tokenizer: Any,
-        target_class: int = None,
-        save_dir: str = None
-    ) -> Dict[str, Any]:
-        """
-        Executes inference and returns token attributions and attention weights.
-        """
-        save_path = Path(save_dir) if save_dir else None
-        return explain_query(
-            model=self.model,
-            tokenizer=tokenizer,
-            query=query,
-            target_class=target_class,
-            save_dir=save_path
-        )
+    # ------------------------------------------------------------------ construction
+    @classmethod
+    def from_base(cls, name_or_path: str, labels: Sequence[str] = MODEL_CLASSES, max_length: int = 256,
+                  device: str = "cpu", dropout: Optional[float] = None) -> "SQLErrorClassifier":
+        """A fresh classification head on top of a pretrained encoder (for training)."""
+        kwargs = dict(num_labels=len(labels),
+                      id2label={i: l for i, l in enumerate(labels)},
+                      label2id={l: i for i, l in enumerate(labels)})
+        if dropout is not None:
+            kwargs.update(hidden_dropout_prob=dropout, attention_probs_dropout_prob=dropout)
+        model = AutoModelForSequenceClassification.from_pretrained(name_or_path, **kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(name_or_path)
+        return cls(model, tokenizer, labels, max_length, device)
 
-    def save_pretrained(self, save_directory: str) -> None:
-        """
-        Delegates weight saving to underlying HuggingFace save_pretrained.
-        """
-        self.model.save_pretrained(save_directory)
+    @classmethod
+    def from_pretrained(cls, directory: str, device: str = "cpu") -> "SQLErrorClassifier":
+        """Loads a fine-tuned checkpoint written by `save_pretrained`."""
+        directory = Path(directory)
+        meta = json.loads((directory / LABEL_FILE).read_text())
+        model = AutoModelForSequenceClassification.from_pretrained(str(directory))
+        tokenizer = AutoTokenizer.from_pretrained(str(directory))
+        return cls(model, tokenizer, meta["labels"], meta.get("max_length", 256), device)
 
-    def load_pretrained(self, model_directory: str) -> None:
-        """
-        Loads the HuggingFace model weights.
-        """
-        try:
-            self.model = AutoModelForSequenceClassification.from_pretrained(
-                model_directory,
-                num_labels=self.num_labels,
-                attn_implementation="eager"
-            )
-        except Exception:
-            self.model = AutoModelForSequenceClassification.from_pretrained(
-                model_directory,
-                num_labels=self.num_labels
-            )
+    def save_pretrained(self, directory: str, extra: Optional[Dict] = None) -> None:
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        self.model.save_pretrained(str(directory))
+        self.tokenizer.save_pretrained(str(directory))
+        meta = {"labels": self.labels, "max_length": self.max_length, "input_format": "sql</s></s>schema"}
+        meta.update(extra or {})
+        (directory / LABEL_FILE).write_text(json.dumps(meta, indent=2))
+
+    # ------------------------------------------------------------------ encoding
+    def encode(self, queries: Sequence[str], schemas: Sequence[Optional[DatabaseSchema]],
+               padding: bool = True) -> Dict[str, torch.Tensor]:
+        texts = list(queries)
+        pairs = [schema_text(q, s) for q, s in zip(queries, schemas)]
+        return self.tokenizer(texts, pairs, truncation="only_second", max_length=self.max_length,
+                              padding=padding, return_tensors="pt")
+
+    # ------------------------------------------------------------------ inference
+    @torch.no_grad()
+    def predict_proba(self, queries: Sequence[str], schemas: Sequence[Optional[DatabaseSchema]],
+                      batch_size: int = 32) -> List[List[float]]:
+        out: List[List[float]] = []
+        for i in range(0, len(queries), batch_size):
+            enc = self.encode(queries[i:i + batch_size], schemas[i:i + batch_size])
+            enc = {k: v.to(self.device) for k, v in enc.items()}
+            logits = self.model(**enc).logits
+            out.extend(torch.softmax(logits, dim=-1).cpu().tolist())
+        return out
+
+    def predict(self, query: str, schema: Optional[DatabaseSchema] = None) -> ModelPrediction:
+        return self.predict_batch([query], [schema])[0]
+
+    def predict_batch(self, queries: Sequence[str], schemas: Sequence[Optional[DatabaseSchema]],
+                      batch_size: int = 32) -> List[ModelPrediction]:
+        preds = []
+        for probs in self.predict_proba(queries, schemas, batch_size):
+            best = max(range(len(probs)), key=probs.__getitem__)
+            preds.append(ModelPrediction(self.labels[best], float(probs[best]),
+                                         {l: float(p) for l, p in zip(self.labels, probs)}))
+        return preds
+
+    def explain(self, query: str, schema: Optional[DatabaseSchema] = None, method: str = "gxi",
+                steps: int = 16) -> Dict:
+        """Token attributions for the predicted class ("gxi" = gradient x input, "ig" = integrated gradients)."""
+        from evaluation.explainability import integrated_gradients
+        enc = self.encode([query], [schema])
+        return integrated_gradients(self.model, self.tokenizer, enc, self.labels, steps=steps,
+                                    device=self.device, method=method)
+
+    @property
+    def backbone(self) -> str:
+        return getattr(self.model.config, "_name_or_path", "unknown")
+
+    def num_parameters(self) -> int:
+        return sum(p.numel() for p in self.model.parameters())

@@ -1,18 +1,21 @@
 # api_config.yaml
-# FastAPI application configurations
+# FastAPI service configuration. Environment variables override the model settings:
+#   SQLDIAGNOSE_MODEL_DIR, SQLDIAGNOSE_DEVICE, SQLDIAGNOSE_GENERATOR
 
 server:
   host: "0.0.0.0"
   port: 8000
-  reload: false
-  workers: 2
 
-app:
-  title: "Intelligent SQL Error Classifier API"
-  description: "FastAPI server for multi-class SQL error classification using transformer models."
-  version: "1.0.0"
-  model_weights_path: "experiments/exp_claudios_codebert-base_42/checkpoints/checkpoint_best.pt"
-  device: "cuda"                       # cuda, cpu, mps
-  enable_cors: true
-  allowed_origins:
-    - "*"
+api:
+  title: "SQLDiagnose API"
+  version: "2.0.0"
+  model_dir: "models/checkpoints/codeberta-small/best"   # fine-tuned classifier (training/train.py output)
+  device: "cpu"                                          # cpu | cuda
+  model_threshold: 0.8        # minimum model confidence for model-only verdicts / warnings
+  generator: "cssupport/t5-small-awesome-text-to-sql"
+  load_generator_on_startup: false   # otherwise loaded on the first /nl2sql request
+  max_batch: 500
+  enable_live_schema_parsing: true   # POST /schemas/parse-live connects to PostgreSQL/MySQL; disable when exposed publicly
+  cors_origins:
+    - "http://localhost:8501"
+    - "http://127.0.0.1:8501"
