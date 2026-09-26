@@ -1,117 +1,58 @@
 # generator.py
-# Clean Architecture: Interface Adapters
-# SQL Generator Service using local T5 model.
+# Clean Architecture: Interface Adapter
+# Natural-language-to-SQL generation with a pretrained T5 model (ISQLGenerator implementation).
 
-import time
-import torch
 import logging
-from typing import Dict, Any, List, Tuple
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-from datasets.schema_parser import DatabaseSchemaParser
+import math
+import time
+from typing import Any, Dict, List
+
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+from analysis.schema import DatabaseSchema
+from .domain.interfaces import ISQLGenerator
 
 logger = logging.getLogger("sql_generator")
 
-class SQLGeneratorService:
-    def __init__(self, model_name_or_path: str = "cssupport/t5-small-awesome-text-to-sql", device: str = None):
-        """
-        Initializes the T5 Text-to-SQL tokenizer and model.
-        """
-        logger.info(f"Initializing SQL Generator model: {model_name_or_path}")
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path).to(self.device)
-        self.model.eval()
-        logger.info(f"SQL Generator model successfully loaded on: {self.device}")
+DEFAULT_GENERATOR = "cssupport/t5-small-awesome-text-to-sql"
 
-    def generate_sql(
-        self, 
-        question: str, 
-        schema: Dict[str, Any], 
-        confidence_threshold: float = 0.5
-    ) -> Dict[str, Any]:
+
+class T5SQLGenerator(ISQLGenerator):
+    def __init__(self, model_name_or_path: str = DEFAULT_GENERATOR, device: str = "cpu", max_new_tokens: int = 128):
+        logger.info("Loading SQL generator %s", model_name_or_path)
+        self.name = model_name_or_path
+        self.device = torch.device(device)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path).to(self.device).eval()
+        self.model.generation_config.max_length = None      # use max_new_tokens only
+        self.max_new_tokens = max_new_tokens
+
+    @staticmethod
+    def build_prompt(question: str, schema: DatabaseSchema) -> str:
+        # Prompt format the model was fine-tuned with: CREATE TABLE statements, then the question.
+        return f"tables:\n{schema.to_ddl()}\nquery for: {question}"
+
+    @torch.no_grad()
+    def generate(self, question: str, schema: DatabaseSchema, num_candidates: int = 3) -> Dict[str, Any]:
         """
-        Generates SQL from a natural language question and a database schema catalog.
-        Returns:
-            {
-                "generated_sql": str,
-                "confidence": float,
-                "inference_time_ms": float,
-                "alternatives": List[str],
-                "warning": str or None
-            }
+        Returns up to `num_candidates` distinct SQL candidates (beam search) with confidences
+        (length-normalised sequence probability).
         """
-        start_time = time.time()
-        
-        # 1. Format database schema to DDL CREATE TABLE statements
-        schema_ddl = DatabaseSchemaParser.to_ddl(schema)
-        
-        # 2. Build model prompt: "tables: {schema} query for: {question}"
-        prompt = f"tables:\n{schema_ddl}\n\nquery for: {question}"
-        
-        # 3. Tokenize input prompt
-        inputs = self.tokenizer(prompt, return_tensors="pt", padding=True, truncation=True).to(self.device)
-        
-        # 4. Generate SQL and obtain output transition scores for confidence analysis
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_length=512,
-                output_scores=True,
-                return_dict_in_generate=True,
-                num_beams=1  # Greedy search for confidence calculations
-            )
-            
-        generated_ids = outputs.sequences[0]
-        generated_sql = self.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-        
-        # 5. Calculate generation confidence score using transition log probabilities
-        probs_list = []
-        # T5 starts sequence generation with decoder_start_token_id (usually pad)
-        # Sequence layout is [pad_token, token_1, token_2, ..., eos_token]
-        # output_scores has logits for [token_1, token_2, ..., eos_token]
-        for step_idx in range(len(generated_ids) - 1):
-            token_id = generated_ids[step_idx + 1].item()
-            if step_idx >= len(outputs.scores):
+        start = time.time()
+        prompt = self.build_prompt(question, schema)
+        enc = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(self.device)
+        beams = max(4, num_candidates)
+        out = self.model.generate(**enc, max_new_tokens=self.max_new_tokens, num_beams=beams,
+                                  num_return_sequences=beams, output_scores=True,
+                                  return_dict_in_generate=True, early_stopping=True)
+        seen, candidates = set(), []
+        for seq, score in zip(out.sequences, out.sequences_scores):
+            sql = self.tokenizer.decode(seq, skip_special_tokens=True).strip()
+            if sql and sql.lower() not in seen:
+                seen.add(sql.lower())
+                candidates.append({"sql": sql, "confidence": round(math.exp(float(score)), 4)})
+            if len(candidates) >= num_candidates:
                 break
-            logits = outputs.scores[step_idx][0]
-            probs = torch.softmax(logits, dim=-1)
-            token_prob = probs[token_id].item()
-            
-            # Skip special padding/eos tokens to avoid inflating score
-            if token_id in [self.tokenizer.pad_token_id, self.tokenizer.eos_token_id]:
-                continue
-            probs_list.append(token_prob)
-            
-        confidence = sum(probs_list) / len(probs_list) if probs_list else 1.0
-        
-        # 6. If confidence is below threshold, generate top alternatives using beam search
-        alternatives = []
-        warning = None
-        
-        if confidence < confidence_threshold:
-            warning = f"Confidence score ({confidence:.2f}) is below the threshold ({confidence_threshold:.2f}). Please review the query carefully."
-            
-            logger.info("Confidence below threshold, generating alternatives using beam search...")
-            with torch.no_grad():
-                outputs_beam = self.model.generate(
-                    **inputs,
-                    max_length=512,
-                    num_beams=4,
-                    num_return_sequences=3,
-                    early_stopping=True
-                )
-            for idx, seq in enumerate(outputs_beam):
-                decoded_alt = self.tokenizer.decode(seq, skip_special_tokens=True).strip()
-                # Skip if it is the same as greedy result
-                if decoded_alt != generated_sql and decoded_alt not in alternatives:
-                    alternatives.append(decoded_alt)
-        
-        inference_time_ms = (time.time() - start_time) * 1000.0
-        
-        return {
-            "generated_sql": generated_sql,
-            "confidence": confidence,
-            "inference_time_ms": inference_time_ms,
-            "alternatives": alternatives,
-            "warning": warning
-        }
+        return {"candidates": candidates, "prompt_truncated": enc["input_ids"].shape[1] >= 512,
+                "inference_time_ms": round((time.time() - start) * 1000, 1), "model": self.name}
