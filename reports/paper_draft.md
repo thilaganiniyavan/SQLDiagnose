@@ -10,11 +10,12 @@ classes, explains the decision, and proposes a repair that is **verified** befor
 deterministic analyzer that compiles the query against an empty database with the target schema and applies
 portable AST rules; it labels a dataset of 9450 queries built by injecting 25+ kinds of realistic errors into
 Spider, keeping only samples whose label the analyzer confirms. A code transformer (CodeBERTa-small, 84M parameters,
-trained on CPU) that reads the query together with a compact schema description reaches **85.3% accuracy /
-85.6 macro-F1 on databases never seen in training**, against 51.3 for a TF-IDF baseline; without the schema
-input it drops to 45.5. A generate-and-verify repair engine fixes 86.3% of erroneous test
+trained on a laptop CPU) that reads the query together with a compact schema description reaches **87.4% accuracy /
+87.6 macro-F1 on databases never seen in training**, against 51.3 for a TF-IDF baseline; without the schema
+input it drops to 47.0. A generate-and-verify repair engine fixes 86.3% of erroneous test
 queries (restoring the exact original in 63.4%), and wrapping a small text-to-SQL model with
-verification and repair raises the share of valid generated SQL from 34.7% to 66.7%.
+verification and repair raises valid SQL from 54.0% to 88.0% and execution accuracy from
+40.0% to 54.7% for a 0.5B-parameter code LLM running on CPU.
 
 ## 1. Introduction
 
@@ -64,7 +65,8 @@ databases, balanced over the seven learned classes.
 ## 4. Models
 
 * **Classifier.** `huggingface/CodeBERTa-small-v1` (6 layers) fine-tuned for 3 epochs (batch 16, lr 5e-5, linear
-  schedule, max 256 tokens) on a 2-core laptop CPU in about 4.5 hours of compute (1,314 steps at ~12 s each plus five validation passes). The schema segment lists the columns and
+  schedule, max 256 tokens), then for 2 more epochs from the best checkpoint at lr 2e-5, keeping the checkpoint with
+  the best validation macro-F1 (0.842 → 0.872). Total compute was about 7 hours on a 2-core laptop CPU. The schema segment lists the columns and
   coarse types of the tables the query mentions, then the names of the other tables.
 * **Baseline.** Logistic regression on word (1–3) and character (2–5) n-gram TF-IDF of the same input.
 * **Repair engine.** For the analyzer's primary issue: edit-distance keyword correction, fuzzy and foreign-key-aware
@@ -79,24 +81,24 @@ databases, balanced over the seven learned classes.
 | System | Accuracy | Macro-F1 (95% CI) | ROC-AUC | ECE |
 |---|---|---|---|---|
 | TF-IDF + LogReg | 53.1 | 51.3 (48.7–53.7) | 87.6 | 0.120 |
-| CodeBERTa-small-v1 | 85.3 | 85.6 (84.0–87.3) | 97.8 | 0.051 |
-| CodeBERTa-small-v1 (no schema input) | 46.1 | 45.5 (43.7–47.4) | 81.6 | 0.453 |
+| CodeBERTa-small-v1 | 87.4 | 87.6 (86.0–89.2) | 98.5 | 0.071 |
+| CodeBERTa-small-v1 (no schema input) | 47.1 | 47.0 (45.0–48.9) | 82.9 | 0.456 |
 
-The transformer outperforms TF-IDF on 505 test queries and underperforms on 55
-(McNemar p = 4e-92). Removing the schema input costs 40.1 macro-F1 points, concentrated on
+The transformer outperforms TF-IDF on 525 test queries and underperforms on 45
+(McNemar p = 8e-105). Removing the schema input costs 40.6 macro-F1 points, concentrated on
 schema-dependent classes, which confirms that these errors are not decidable from the query alone.
 
 | Class | Precision | Recall | F1 |
 |---|---|---|---|
-| CORRECT | 56.8 | 84.0 | 67.7 |
-| SYNTAX_ERROR | 100.0 | 76.5 | 86.7 |
-| UNKNOWN_TABLE | 98.5 | 95.5 | 97.0 |
-| UNKNOWN_COLUMN | 76.0 | 58.5 | 66.1 |
-| DATATYPE_MISMATCH | 92.4 | 97.5 | 94.9 |
-| AMBIGUOUS_REFERENCE | 94.8 | 91.5 | 93.1 |
+| CORRECT | 61.1 | 81.0 | 69.7 |
+| SYNTAX_ERROR | 98.3 | 88.5 | 93.2 |
+| UNKNOWN_TABLE | 97.5 | 96.5 | 97.0 |
+| UNKNOWN_COLUMN | 81.4 | 63.5 | 71.3 |
+| DATATYPE_MISMATCH | 93.3 | 97.0 | 95.1 |
+| AMBIGUOUS_REFERENCE | 94.8 | 92.0 | 93.4 |
 | SEMANTIC_ERROR | 94.0 | 93.5 | 93.7 |
 
-The weakest class is UNKNOWN_COLUMN (recall 58.5%): most misses are predicted CORRECT, i.e. the model does not
+The weakest class is UNKNOWN_COLUMN (recall 63.5%): most misses are predicted CORRECT, i.e. the model does not
 notice that a plausible-looking column is absent from the listed columns. Table-level errors, which require only
 matching against a short list of table names, are recognised almost perfectly.
 
@@ -118,15 +120,23 @@ the intended value behind `age > 'young'` cannot be inferred, and the engine onl
 
 ### 5.3 Text-to-SQL with verification
 
-| Pipeline | Valid SQL | Execution accuracy |
-|---|---|---|
-| Raw top-1 generation | 34.7 | 16.0 |
-| + verify & select among candidates | 43.3 | 20.0 |
-| + repair when no candidate is valid | 66.7 | 22.0 |
+The same 150 Spider-dev questions are answered by two generators: a fine-tuned T5-small text-to-SQL model and
+the instruction-tuned code LLM Qwen2.5-Coder-0.5B-Instruct (zero-shot, schema given as CREATE TABLE statements).
+The pipeline verifies the first candidate, generates alternatives only if it is rejected, and repairs the best
+candidate when none is valid.
 
-Verification and repair substantially increase the share of executable, schema-consistent SQL. Execution accuracy
-improves less, because a valid query is not necessarily the intended one; the generator (T5-small) is the limiting
-factor.
+| Generator | Pipeline | Valid SQL | Execution accuracy |
+|---|---|---|---|
+| Qwen2.5-Coder-0.5B-Instruct | raw top-1 | 54.0 | 40.0 |
+| Qwen2.5-Coder-0.5B-Instruct | + verify & select | 74.0 | 49.3 |
+| Qwen2.5-Coder-0.5B-Instruct | + repair | 88.0 | 54.7 |
+| t5-small-awesome-text-to-sql | raw top-1 | 34.7 | 16.0 |
+| t5-small-awesome-text-to-sql | + verify & select | 43.3 | 20.0 |
+| t5-small-awesome-text-to-sql | + repair | 66.7 | 22.0 |
+
+Verification and repair help both generators. Validity gains are larger than execution-accuracy gains, because a
+valid query is not necessarily the intended one; the generator's understanding of the question is the limiting
+factor, which is why the stronger generator benefits most in absolute terms.
 
 ## 6. Limitations
 
@@ -134,7 +144,8 @@ Errors are synthetic apart from the text-to-SQL study; the analyzer follows SQLi
 the classifier is trained on analyzer labels and therefore approximates, rather than exceeds, the analyzer when a
 schema is available. Its value is in the schema-free setting, in calibrated probabilities and in explanations.
 Larger encoders (e.g. CodeBERT-base, see `notebooks/train_codebert_gpu.ipynb`) are expected to close part of the
-UNKNOWN_COLUMN gap.
+UNKNOWN_COLUMN gap. NL2SQL with the code LLM takes tens of seconds per question on a laptop CPU; a GPU reduces
+this to about a second.
 
 ## 7. Reproducibility
 

@@ -341,13 +341,17 @@ def write_report(res: Dict, out_dir: Path) -> None:
     nl = res.get("nl2sql")
     if nl:
         L += ["## 4. NL2SQL with verification and repair", "",
-              f"{nl['n']} random Spider-dev questions, generator `{res.get('generator', '')}`. "
+              f"{nl['n']} random Spider-dev questions (the same questions for every generator). "
               "Validity = passes the analyzer; execution accuracy = same result set as the gold query on the real database.", "",
-              "| Pipeline | Valid SQL | Execution accuracy |", "|---|---|---|",
-              f"| Raw top-1 generation | {pct(nl['raw_validity'])} | {pct(nl['raw_execution_accuracy'])} |",
-              f"| + verify & select among candidates | {pct(nl['selected_validity'])} | {pct(nl['selected_execution_accuracy'])} |",
-              f"| + repair when no candidate is valid | {pct(nl['final_validity'])} | {pct(nl['final_execution_accuracy'])} |",
-              "", f"Mean generation time {nl['mean_generation_ms']:.0f} ms per question (CPU).", "",
+              "| Generator | Pipeline | Valid SQL | Execution accuracy | Time / question |", "|---|---|---|---|---|"]
+        for g, v in res.get("nl2sql_by_generator", {res.get("generator", ""): nl}).items():
+            short = g.split("/")[-1]
+            L += [f"| {short} | raw top-1 | {pct(v['raw_validity'])} | {pct(v['raw_execution_accuracy'])} | "
+                  f"{v['mean_generation_ms'] / 1000:.1f} s |",
+                  f"| {short} | + verify & select | {pct(v['selected_validity'])} | {pct(v['selected_execution_accuracy'])} | |",
+                  f"| {short} | + repair | {pct(v['final_validity'])} | {pct(v['final_execution_accuracy'])} | |"]
+        L += ["", f"The service uses `{res.get('generator', '')}` by default (CPU times include generating extra "
+                  "candidates when the first one fails verification).", "",
               "![nl2sql](figures/nl2sql_pipeline.png)", ""]
         if nl["invalid_raw_examples"]:
             L += ["Invalid raw generations and what the pipeline returned:", ""]
@@ -379,10 +383,12 @@ def main():
     ap.add_argument("--data-dir", type=Path, default=DATA_DIR)
     ap.add_argument("--out", type=Path, default=PROJECT_ROOT / "reports")
     ap.add_argument("--nl2sql-samples", type=int, default=150)
-    ap.add_argument("--generator", default="cssupport/t5-small-awesome-text-to-sql")
-    ap.add_argument("--nl2sql-cache", type=Path, default=None,
-                    help="reuse NL2SQL results from this JSON if it matches --nl2sql-samples/--generator, else write it")
-    ap.add_argument("--only-nl2sql", action="store_true", help="run just the NL2SQL study (use with --nl2sql-cache)")
+    ap.add_argument("--generator", action="append", default=[],
+                    help="NL2SQL generator(s) to compare (repeatable; the first is the headline one). "
+                         "Default: Qwen2.5-Coder-0.5B-Instruct and T5-small")
+    ap.add_argument("--nl2sql-cache-dir", type=Path, default=PROJECT_ROOT / "reports" / "cache",
+                    help="per-generator NL2SQL results are reused from here when they match --nl2sql-samples")
+    ap.add_argument("--only-nl2sql", action="store_true", help="run just the NL2SQL study (results are cached per generator)")
     ap.add_argument("--limit", type=int, default=0, help="subsample the test split (quick runs)")
     ap.add_argument("--threads", type=int, default=0)
     args = ap.parse_args()
@@ -424,7 +430,9 @@ def main():
         if main_clf is None:
             main_clf, res["main_model"] = clf, name
             res["latency"] = single_query_latency(clf, test, schemas)
-            res["training_curve"] = plot_training_curve(md.parent / "train_log.csv", fig_dir / "training_curve.png")
+            log_csv = md.parent / "train_log_full.csv"          # written when a run continues an earlier one
+            log_csv = log_csv if log_csv.exists() else md.parent / "train_log.csv"
+            res["training_curve"] = plot_training_curve(log_csv, fig_dir / "training_curve.png")
 
     t = time.perf_counter()
     for r in test:
@@ -459,42 +467,54 @@ def main():
                           "rate", "Repair on the test split", fig_dir / "repair_by_class.png")
 
     if args.nl2sql_samples > 0:
-        res["generator"] = args.generator
-        cache = args.nl2sql_cache
-        cached = json.loads(cache.read_text()) if cache and cache.exists() else None
-        if cached and cached.get("n") == args.nl2sql_samples and cached.get("generator") == args.generator:
-            print(f"[4/5] NL2SQL: reusing {cache}", flush=True)
-            res["nl2sql"] = cached
-        else:
-            print(f"[4/5] NL2SQL on {args.nl2sql_samples} questions ...", flush=True)
-            from models.generator import T5SQLGenerator
-            from services.diagnosis import DiagnosisService
-            from services.nl2sql import NL2SQLService
-            service = NL2SQLService(T5SQLGenerator(args.generator), DiagnosisService(None, analyzer))
-            res["nl2sql"] = evaluate_nl2sql(service, args.nl2sql_samples)
-            if cache and res["nl2sql"]:
-                cache.parent.mkdir(parents=True, exist_ok=True)
-                cache.write_text(json.dumps({**res["nl2sql"], "generator": args.generator}, indent=1))
+        from models.generator import DEFAULT_GENERATOR, T5_GENERATOR
+        generators = args.generator or [DEFAULT_GENERATOR, T5_GENERATOR]
+        res["generator"] = generators[0]
+        res["nl2sql_by_generator"] = {}
+        for gen_name in generators:
+            cache = args.nl2sql_cache_dir / f"nl2sql_{re.sub(r'[^A-Za-z0-9]+', '_', gen_name)}.json"
+            cached = json.loads(cache.read_text()) if cache.exists() else None
+            if cached and cached.get("n") == args.nl2sql_samples and cached.get("generator") == gen_name:
+                print(f"[4/5] NL2SQL {gen_name}: reusing {cache}", flush=True)
+                gen_res = cached
+            else:
+                print(f"[4/5] NL2SQL {gen_name} on {args.nl2sql_samples} questions ...", flush=True)
+                from models.generator import load_generator
+                from services.diagnosis import DiagnosisService
+                from services.nl2sql import NL2SQLService
+                service = NL2SQLService(load_generator(gen_name), DiagnosisService(None, analyzer))
+                gen_res = evaluate_nl2sql(service, args.nl2sql_samples)
+                if gen_res:
+                    gen_res["generator"] = gen_name
+                    cache.parent.mkdir(parents=True, exist_ok=True)
+                    cache.write_text(json.dumps(gen_res, indent=1))
+            if gen_res:
+                res["nl2sql_by_generator"][gen_name] = gen_res
+        res["nl2sql"] = res["nl2sql_by_generator"].get(generators[0])
         if args.only_nl2sql:
-            print(json.dumps({k: v for k, v in res["nl2sql"].items() if k != "invalid_raw_examples"}, indent=1))
+            for g, v in res["nl2sql_by_generator"].items():
+                print(g, json.dumps({k: x for k, x in v.items() if k != "invalid_raw_examples"}, indent=1))
             return
-        nl = res["nl2sql"]
-        if nl:
-            plot_grouped_bars(["valid SQL", "execution accuracy"],
-                              {"raw top-1": [nl["raw_validity"], nl["raw_execution_accuracy"]],
-                               "+ verify & select": [nl["selected_validity"], nl["selected_execution_accuracy"]],
-                               "+ repair": [nl["final_validity"], nl["final_execution_accuracy"]]},
-                              "rate", "NL2SQL pipeline (Spider dev)", fig_dir / "nl2sql_pipeline.png")
+        series = {}
+        for g, v in res["nl2sql_by_generator"].items():
+            short = g.split("/")[-1]
+            series[f"{short}: raw"] = [v["raw_validity"], v["raw_execution_accuracy"]]
+            series[f"{short}: verified+repaired"] = [v["final_validity"], v["final_execution_accuracy"]]
+        if series:
+            plot_grouped_bars(["valid SQL", "execution accuracy"], series, "rate",
+                              "NL2SQL on Spider dev: raw generation vs. verify/select/repair",
+                              fig_dir / "nl2sql_pipeline.png")
 
     if main_clf is not None:
         print("[5/5] attributions ...", flush=True)
         res["attributions"] = attribution_examples(main_clf, test, schemas, fig_dir)
 
-    write_report(res, out)
+    report_res = {**res, "classifiers": {k: dict(v) for k, v in res["classifiers"].items()}}
     for m in res["classifiers"].values():
         m.pop("probs", None)
         m.pop("correct", None)
-    (out / "results.json").write_text(json.dumps(res, indent=1, default=float))
+    (out / "results.json").write_text(json.dumps(res, indent=1, default=float))   # saved first: never lose results
+    write_report(report_res, out)
     print(f"Wrote {out / 'evaluation_report.md'} and {out / 'results.json'}")
 
 
