@@ -19,11 +19,16 @@ TARGET = ROOT / "models" / "checkpoints" / "codeberta-small-ft"
 
 
 def download(url: str, dest: Path) -> None:
+    last = [-1]
+
     def progress(blocks, block_size, total):
         if total > 0:
             done = min(blocks * block_size, total)
-            sys.stdout.write(f"\r  {done / 1e6:6.1f} / {total / 1e6:.1f} MB")
-            sys.stdout.flush()
+            pct = int(100 * done / total)
+            if pct != last[0]:                       # redraw only when the percentage changes
+                last[0] = pct
+                sys.stdout.write(f"\r  {done / 1e6:6.1f} / {total / 1e6:.1f} MB ({pct}%)")
+                sys.stdout.flush()
     urllib.request.urlretrieve(url, dest, reporthook=progress)
     print()
 
