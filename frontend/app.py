@@ -4,6 +4,7 @@
 #
 #   python -m streamlit run frontend/app.py
 
+import difflib
 import html
 import json
 import os
@@ -97,6 +98,49 @@ def sql_box(sql: str) -> str:
     return f'<div class="sqlbox">{html.escape(sql)}</div>'
 
 
+def diff_html(before: str, after: str) -> str:
+    """Word-level diff: removed words struck through in red, added words in green."""
+    a, b = before.split(), after.split()
+    out = []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b).get_opcodes():
+        if tag == "equal":
+            out.append(html.escape(" ".join(a[i1:i2])))
+            continue
+        if i2 > i1:
+            out.append(f'<span style="background:rgba(239,68,68,.25);text-decoration:line-through">'
+                       f'{html.escape(" ".join(a[i1:i2]))}</span>')
+        if j2 > j1:
+            out.append(f'<span style="background:rgba(34,197,94,.3)">{html.escape(" ".join(b[j1:j2]))}</span>')
+    return f'<div class="sqlbox">{" ".join(out)}</div>'
+
+
+# One verified example per error class on the concert_singer database.
+EXAMPLES = {
+    "Several errors at once": ("SELEC Name, count(*) FORM singr WHERE Age > 'thirty'", []),
+    "CORRECT": ("SELECT Name, Country FROM singer WHERE Age > 40 ORDER BY Age DESC", []),
+    "SYNTAX_ERROR": ("SELECT Name, Country FORM singer WHERE Age > 40", []),
+    "UNKNOWN_TABLE": ("SELECT count(*) FROM singers WHERE Country = 'France'", []),
+    "UNKNOWN_COLUMN": ("SELECT Nmae, Age FROM singer ORDER BY Age", []),
+    "DATATYPE_MISMATCH": ("SELECT Name FROM singer WHERE Age > 'thirty'", []),
+    "AMBIGUOUS_REFERENCE": ("SELECT Singer_ID, Name FROM singer JOIN singer_in_concert "
+                            "ON singer.Singer_ID = singer_in_concert.Singer_ID", []),
+    "SEMANTIC_ERROR (aggregate in WHERE)": ("SELECT Name FROM singer WHERE Age > avg(Age)", []),
+    "SEMANTIC_ERROR (missing join condition)": ("SELECT T2.concert_Name FROM stadium AS T1 JOIN concert AS T2 "
+                                                "WHERE T1.Capacity > 5000", []),
+    "PERMISSION_DENIED (stadium is restricted)": ("SELECT Name, Capacity FROM stadium", ["stadium"]),
+}
+
+
+def load_example():
+    choice = st.session_state.get("example")
+    if choice in EXAMPLES:
+        query, restricted = EXAMPLES[choice]
+        st.session_state.query = query
+        st.session_state.schema_source = "Example database"
+        st.session_state.db_select = "concert_singer"
+        st.session_state.restricted = restricted
+
+
 def token_html(tokens: List[Dict]) -> str:
     peak = max((abs(t["score"]) for t in tokens), default=1.0) or 1.0
     spans = []
@@ -111,7 +155,20 @@ def token_html(tokens: List[Dict]) -> str:
 ss = st.session_state
 ss.setdefault("history", [])
 ss.setdefault("custom_schema", None)
-ss.setdefault("query", "SELECT nme, count(*) FROM singer WHERE age > 'thirty'")
+ss.setdefault("query", EXAMPLES["Several errors at once"][0])
+
+# Shareable links: ?example=<name>&run=1 or ?q=<sql>&db=<db_id>&run=1&tab=<tab>
+_params = st.query_params
+if "link_applied" not in ss:
+    ss.link_applied = True
+    if _params.get("example") in EXAMPLES:
+        ss.example = _params["example"]
+        load_example()
+    elif _params.get("q"):
+        ss.query = _params["q"]
+        if _params.get("db"):
+            ss.schema_source, ss.db_select = "Example database", _params["db"]
+    ss.auto_run = _params.get("run") == "1"
 
 # ---------------------------------------------------------------------- sidebar: status + schema context
 health = get_health()
@@ -133,12 +190,14 @@ with st.sidebar:
     st.subheader("Database schema")
     dbs = get_example_dbs()
     sources = ["Example database", "Custom schema", "No schema"]
-    source = st.radio("Schema source", sources, index=0 if dbs else 2, label_visibility="collapsed")
+    ss.setdefault("schema_source", sources[0] if dbs else sources[2])
+    source = st.radio("Schema source", sources, label_visibility="collapsed", key="schema_source")
     context: Dict[str, Any] = {}
     active_tables: Dict[str, Any] = {}
     if source == "Example database" and dbs:
         default = CFG.get("default_database")
-        db_id = st.selectbox("Database", dbs, index=dbs.index(default) if default in dbs else 0)
+        ss.setdefault("db_select", default if default in dbs else dbs[0])
+        db_id = st.selectbox("Database", dbs, key="db_select")
         context["db_id"] = db_id
         info = get_example_schema(db_id)
         active_tables = info["database_schema"] if info else {}
@@ -164,17 +223,18 @@ with st.sidebar:
                 cols = info.get("columns", {})
                 cols_txt = ", ".join(f"{c} {ty}" for c, ty in cols.items()) if isinstance(cols, dict) else ", ".join(map(str, cols))
                 st.markdown(f"**{t}**: {cols_txt}")
-        restricted = st.multiselect("Restricted tables (access policy)", list(active_tables))
+        if any(t not in active_tables for t in ss.get("restricted", [])):
+            ss.restricted = []
+        restricted = st.multiselect("Restricted tables (access policy)", list(active_tables), key="restricted")
         if restricted:
             context["access_policy"] = {"restricted_tables": restricted, "restricted_columns": []}
 
     st.subheader("History")
-    if not ss.history:
-        st.caption("Nothing yet.")
-    for i, h in enumerate(ss.history):
-        if st.button(f"{h['class']}: {h['query'][:32]}", key=f"hist{i}", width="stretch"):
-            ss.query = h["query"]
-            st.rerun()
+    history_box = st.container()          # filled at the end of the script, after this run is recorded
+
+
+def restore(query: str):
+    st.session_state.query = query
 
 
 def remember(query: str, cls: str):
@@ -185,20 +245,24 @@ def remember(query: str, cls: str):
 
 # ---------------------------------------------------------------------- tabs
 st.title("SQL diagnosis, repair and NL→SQL")
-tab_diag, tab_nl, tab_batch, tab_schema, tab_stats = st.tabs(
-    ["Diagnose & repair", "Question → SQL", "Batch", "Schema", "Service"])
+st.caption("Classifies a query into one of eight error classes, explains why, and returns a repair that has been "
+           "verified against the schema. A deterministic analyzer provides verified verdicts; a fine-tuned code "
+           "transformer adds a learned opinion with token-level explanations.")
+tab_diag, tab_nl, tab_batch, tab_schema, tab_results, tab_stats = st.tabs(
+    ["Diagnose & repair", "Question → SQL", "Batch", "Schema", "Results", "Service"])
 
 # ---- Diagnose & repair
 with tab_diag:
     left, right = st.columns([1, 1], gap="large")
     with left:
+        st.selectbox("Load an example", ["—"] + list(EXAMPLES), key="example", on_change=load_example)
         query = st.text_area("SQL query", key="query", height=180)
         c1, c2 = st.columns(2)
         explain = c1.toggle("Token attributions", value=True, disabled=not (health and health.get("model_loaded")))
         method = c2.selectbox("Method", ["gxi", "ig"], format_func=lambda m: {"gxi": "Gradient × input (fast)",
                                                                                "ig": "Integrated gradients"}[m],
                               disabled=not explain)
-        run = st.button("Diagnose and repair", type="primary", width="stretch")
+        run = st.button("Diagnose and repair", type="primary", width="stretch") or ss.pop("auto_run", False)
     with right:
         if run and query.strip():
             with st.spinner("Analyzing ..."):
@@ -223,7 +287,7 @@ with tab_diag:
                     else:
                         st.warning(f"No complete fix found (remaining: {r['remaining_error']}).")
                     if r["repaired_query"]:
-                        st.markdown(sql_box(r["repaired_query"]), unsafe_allow_html=True)
+                        st.markdown(diff_html(query, r["repaired_query"]), unsafe_allow_html=True)
                     for i, s in enumerate(r["steps"], 1):
                         st.markdown(f"{i}. `{s['error_class']}` {html.escape(s['description'])}")
                     if not r["success"]:
@@ -337,6 +401,48 @@ with tab_schema:
         st.success(f"Parsed {len(ss.custom_schema)} tables. Select *Custom schema* in the sidebar to use it.")
         st.json(ss.custom_schema, expanded=False)
 
+# ---- Results (read from the evaluation outputs on disk)
+with tab_results:
+    results_path = PROJECT_ROOT / "reports" / "results.json"
+    if not results_path.exists():
+        st.info("No evaluation results yet. Run `python -m evaluation.evaluate --model-dir <checkpoint>`.")
+    else:
+        res = json.loads(results_path.read_text())
+        main = res.get("main_model")
+        clf = res["classifiers"].get(main, {}) if main else {}
+        rep_all = res.get("repair", {}).get("ALL", {})
+        nl = res.get("nl2sql") or {}
+        st.write(f"Test set: {res['dataset']['test']} queries from {res['dataset']['test_dbs']} databases that never "
+                 f"appear in training.")
+        k1, k2, k3, k4 = st.columns(4)
+        if clf:
+            base = res["classifiers"]["TF-IDF + LogReg"]
+            k1.metric("Classifier accuracy", f"{100 * clf['accuracy']:.1f}%",
+                      f"{100 * (clf['accuracy'] - base['accuracy']):+.1f} vs TF-IDF")
+            k2.metric("Macro-F1", f"{100 * clf['macro_f1']:.1f}")
+        if rep_all:
+            k3.metric("Verified repairs", f"{100 * rep_all['verified_rate']:.1f}%",
+                      f"{100 * rep_all['exact_rate']:.1f}% exact", delta_color="off")
+        if nl:
+            k4.metric("NL→SQL valid SQL", f"{100 * nl['final_validity']:.1f}%",
+                      f"{100 * (nl['final_validity'] - nl['raw_validity']):+.1f} vs raw generation")
+        st.subheader("Classification")
+        st.dataframe(pd.DataFrame([{"system": n, "accuracy": round(100 * v["accuracy"], 1),
+                                    "macro-F1": round(100 * v["macro_f1"], 1),
+                                    "ROC-AUC": round(100 * (v.get("macro_roc_auc") or 0), 1)}
+                                   for n, v in res["classifiers"].items()]), hide_index=True, width="stretch")
+        fig = PROJECT_ROOT / "reports" / "figures"
+        c1, c2 = st.columns(2)
+        for col, name, cap in ((c1, "confusion_matrix.png", "Confusion matrix"),
+                               (c2, "per_class_f1.png", "Per-class F1"),
+                               (c1, "repair_by_class.png", "Repair by class"),
+                               (c2, "nl2sql_pipeline.png", "NL→SQL pipeline"),
+                               (c1, "training_curve.png", "Training curve"),
+                               (c2, "reliability.png", "Calibration")):
+            if (fig / name).exists():
+                col.image(str(fig / name), caption=cap)
+        st.caption("Full report: reports/evaluation_report.md")
+
 # ---- Service
 with tab_stats:
     m = api("GET", "/metrics") if health else None
@@ -357,3 +463,12 @@ with tab_stats:
     if labels:
         st.subheader("Error classes")
         st.dataframe(pd.DataFrame(labels), hide_index=True, width="stretch")
+
+
+# ---- sidebar history (rendered last so it includes the query just run)
+with history_box:
+    if not ss.history:
+        st.caption("Nothing yet.")
+    for i, h in enumerate(ss.history):
+        st.button(f"{h['class']}: {h['query'][:32]}", key=f"hist{i}", width="stretch",
+                  on_click=restore, args=(h["query"],))

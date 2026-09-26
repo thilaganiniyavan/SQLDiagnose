@@ -31,6 +31,7 @@ COPY services ./services
 COPY training ./training
 COPY utils ./utils
 COPY data/processed/schemas.json ./data/processed/schemas.json
+COPY reports ./reports
 COPY .streamlit ./.streamlit
 
 RUN useradd --create-home app && chown -R app /app
