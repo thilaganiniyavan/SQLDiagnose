@@ -92,27 +92,30 @@ A 5-minute demo script with likely reviewer questions is in [`docs/DEMO.md`](doc
 
 ## Quick start
 
+Run the demo (about 5 minutes, no training needed):
+
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# 1. data (downloads Spider, ~200 MB; the processed splits are already in data/processed)
-python -m data_pipeline.build_dataset --download
-
-# 2. train (CPU: CodeBERTa-small, a few hours; GPU: see notebooks/train_codebert_gpu.ipynb)
-python -m training.train
-python -m training.train --resume          # continue an interrupted run
-# further fine-tuning from a checkpoint (how the served model was produced: 3 + 2 epochs)
-python -m training.train --init-from models/checkpoints/codeberta-small/best \
-    --output-dir models/checkpoints/codeberta-small-ft --epochs 2 --lr 2e-5 --batch-size 8 --grad-accum 2
-
-# 3. evaluate -> reports/evaluation_report.md, reports/results.json, reports/figures/
-python -m evaluation.evaluate --model-dir models/checkpoints/codeberta-small-ft/best
-
-# 4. serve
-python -m uvicorn deployment.api.main:app --port 8000     # API docs at http://localhost:8000/docs
-python -m streamlit run frontend/app.py                   # UI at http://localhost:8501
+git clone https://github.com/thilaganiniyavan/SQLDiagnose.git && cd SQLDiagnose
+make setup        # virtual environment + dependencies
+make model        # downloads the fine-tuned classifier (310 MB) from the GitHub release
+make api          # terminal 1: REST API, docs at http://localhost:8000/docs
+make ui           # terminal 2: UI at http://localhost:8501
 ```
+
+The NL→SQL generator (Qwen2.5-Coder-0.5B, ~1 GB) downloads automatically on the first *Question → SQL*
+request. `make help` lists all tasks; each one is a plain command you can also run directly.
+
+Reproduce the research results:
+
+```bash
+make data         # downloads Spider and rebuilds the dataset (identical to data/processed)
+make train        # CodeBERTa-small, 3 epochs (several hours on CPU; GPU: notebooks/train_codebert_gpu.ipynb)
+make finetune     # 2 further epochs from the best checkpoint (how the released model was produced)
+make evaluate     # -> reports/evaluation_report.md, reports/results.json, reports/figures/
+make test
+```
+
+`python -m training.train --resume` continues an interrupted run.
 
 Without a trained checkpoint the API and UI still work with the deterministic analyzer and repair engine;
 `GET /api/v1/health` reports `model_loaded: false`.
