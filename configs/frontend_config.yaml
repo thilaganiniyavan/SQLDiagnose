@@ -1,12 +1,10 @@
 # frontend_config.yaml
-# Streamlit interface configuration
+# Streamlit UI configuration. SQLDIAGNOSE_API_URL overrides api_url.
 
 streamlit:
-  title: "SQL Error Classifier Panel"
-  api_url: "http://localhost:8000/api/v1/classify"
-  theme: "dark"
-  max_query_length: 1000
-  show_confidence_threshold: 0.15
-  analytics:
-    enable_history_tracking: true
-    history_limit: 10
+  title: "SQLDiagnose"
+  api_url: "http://127.0.0.1:8000/api/v1"
+  default_database: "concert_singer"
+  request_timeout_s: 60
+  nl2sql_timeout_s: 180      # the first NL2SQL request downloads/loads the generator
+  history_limit: 15
