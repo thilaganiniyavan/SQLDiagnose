@@ -1,5 +1,7 @@
 # SQLDiagnose
 
+[![tests](https://github.com/thilaganiniyavan/SQLDiagnose/actions/workflows/tests.yml/badge.svg)](https://github.com/thilaganiniyavan/SQLDiagnose/actions/workflows/tests.yml)
+
 Diagnose, explain and repair SQL queries, and turn natural-language questions into verified SQL.
 
 Given a query and (optionally) a database schema, SQLDiagnose tells you **whether the query is wrong and why**,
@@ -18,6 +20,13 @@ queries that go through the same verify-and-repair loop.
 | `PERMISSION_DENIED` | touches a table/column restricted by an access policy | `SELECT salary FROM staff` |
 | `SEMANTIC_ERROR` | grammatical but logically invalid | `WHERE count(*) > 1`, `= NULL`, missing `GROUP BY` or join condition |
 
+![Diagnosis and verified repair of a query with five errors](docs/images/diagnose.png)
+
+<details><summary>Missing join condition repaired from the foreign key</summary>
+
+![Join repair](docs/images/join_repair.png)
+</details>
+
 ## Results
 
 Measured on 1,400 test queries from 20 Spider databases that never appear in training
@@ -26,17 +35,24 @@ Measured on 1,400 test queries from 20 Spider databases that never appear in tra
 | | Accuracy | Macro-F1 |
 |---|---|---|
 | TF-IDF + logistic regression | 53.1 | 51.3 |
-| CodeBERTa-small, query only (ablation) | 46.1 | 45.5 |
-| **CodeBERTa-small, query + schema** (trained on a laptop CPU) | **85.3** | **85.6** |
+| CodeBERTa-small, query only (ablation) | 47.1 | 47.0 |
+| **CodeBERTa-small, query + schema** (trained on a laptop CPU) | **87.4** | **87.6** |
 
 * **Repair:** 86.3% of erroneous test queries get a verified fix, and 63.4% are restored exactly to the original.
-  Syntax and unknown-table errors are 93–96% exact. Mean repair time is 31 ms.
+  Syntax and unknown-table errors are 93–96% exact. Mean repair time is 33 ms.
 * **Analyzer:** 96.5% of the 8,034 human-written Spider queries pass; the rest are genuine issues.
   The access-policy check is 100% correct on 400 query/policy pairs.
-* **NL→SQL:** on 150 Spider-dev questions, verification plus repair raises valid SQL from 34.7% to 66.7%.
-  Execution accuracy goes from 16.0% to 22.0%; the small T5 generator is the limit.
-* The classifier's weakest class is `UNKNOWN_COLUMN` (F1 66%). A larger encoder can be trained on a free GPU
+* **NL→SQL** (150 Spider-dev questions, same questions for both generators):
+
+  | Generator | Valid SQL: raw → verified + repaired | Correct result: raw → final |
+  |---|---|---|
+  | T5-small (text-to-SQL) | 34.7% → 66.7% | 16.0% → 22.0% |
+  | **Qwen2.5-Coder-0.5B-Instruct** (default) | **54.0% → 88.0%** | **40.0% → 54.7%** |
+
+* The classifier's weakest class is `UNKNOWN_COLUMN` (F1 71%). A larger encoder can be trained on a free GPU
   with [`notebooks/train_codebert_gpu.ipynb`](notebooks/train_codebert_gpu.ipynb).
+
+A 5-minute demo script with likely reviewer questions is in [`docs/DEMO.md`](docs/DEMO.md).
 
 ## How it works
 
@@ -52,7 +68,7 @@ Measured on 1,400 test queries from 20 Spider databases that never appear in tra
                  └───────────────────────────────┘                            ▲
  query + schema ─► Transformer classifier (CodeBERTa / CodeBERT) ─ probabilities, attributions
  erroneous query ─► Repair engine: candidate fixes per issue → re-analyze → keep smallest verified fix → repeat
- question ───────► T5 text-to-SQL → candidates → verify → select → repair
+ question ───────► code LLM (Qwen2.5-Coder-0.5B) → candidate → verify → [more candidates] → repair
 ```
 
 * **Analyzer** (`analysis/`): the query is compiled (never executed) by SQLite against an in-memory database
@@ -86,9 +102,12 @@ python -m data_pipeline.build_dataset --download
 # 2. train (CPU: CodeBERTa-small, a few hours; GPU: see notebooks/train_codebert_gpu.ipynb)
 python -m training.train
 python -m training.train --resume          # continue an interrupted run
+# further fine-tuning from a checkpoint (how the served model was produced: 3 + 2 epochs)
+python -m training.train --init-from models/checkpoints/codeberta-small/best \
+    --output-dir models/checkpoints/codeberta-small-ft --epochs 2 --lr 2e-5 --batch-size 8 --grad-accum 2
 
 # 3. evaluate -> reports/evaluation_report.md, reports/results.json, reports/figures/
-python -m evaluation.evaluate --model-dir models/checkpoints/codeberta-small/best
+python -m evaluation.evaluate --model-dir models/checkpoints/codeberta-small-ft/best
 
 # 4. serve
 python -m uvicorn deployment.api.main:app --port 8000     # API docs at http://localhost:8000/docs
@@ -147,7 +166,7 @@ docker compose -f deployment/docker-compose.yml up --build     # API on :8000, U
 ```
 analysis/          schema model + deterministic analyzer
 data_pipeline/     Spider loader, mutation operators, dataset builder, schema parsers
-models/            domain (labels, entities, interfaces), transformer classifier, T5 generator
+models/            domain (labels, entities, interfaces), transformer classifier, NL2SQL generators
 repair/            verified repair engine
 services/          use cases: diagnosis (analyzer + model + repair), NL2SQL, schema registry
 training/          fine-tuning script (CPU/GPU, resumable)
