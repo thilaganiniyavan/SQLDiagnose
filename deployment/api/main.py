@@ -26,6 +26,8 @@ from .routes import router
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("sqldiagnose.api")
+for _noisy in ("httpx", "httpcore", "huggingface_hub"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = PROJECT_ROOT / "configs" / "api_config.yaml"
@@ -124,8 +126,8 @@ class AppContext:
         with self._gen_lock:
             if self._nl2sql is None and self.generator_error is None:
                 try:
-                    from models.generator import T5SQLGenerator
-                    self.generator = T5SQLGenerator(self.generator_name, device=self.device)
+                    from models.generator import load_generator
+                    self.generator = load_generator(self.generator_name, device=self.device)
                     self._nl2sql = NL2SQLService(self.generator, self.diagnosis)
                 except Exception as e:                                    # network / disk errors
                     self.generator_error = str(e)
