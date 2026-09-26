@@ -1,0 +1,990 @@
+{
+ "dataset": {
+  "train": 7000,
+  "test": 1400,
+  "train_dbs": 119,
+  "test_dbs": 20
+ },
+ "classifiers": {
+  "TF-IDF + LogReg": {
+   "accuracy": 0.5314285714285715,
+   "macro_precision": 0.6194378394773664,
+   "macro_recall": 0.5314285714285714,
+   "macro_f1": 0.5128687037410833,
+   "per_class": {
+    "CORRECT": {
+     "precision": 0.296875,
+     "recall": 0.095,
+     "f1": 0.14393939393939395,
+     "support": 200
+    },
+    "SYNTAX_ERROR": {
+     "precision": 0.926829268292683,
+     "recall": 0.19,
+     "f1": 0.3153526970954357,
+     "support": 200
+    },
+    "UNKNOWN_TABLE": {
+     "precision": 0.48484848484848486,
+     "recall": 0.88,
+     "f1": 0.6252220248667851,
+     "support": 200
+    },
+    "UNKNOWN_COLUMN": {
+     "precision": 0.28841607565011823,
+     "recall": 0.61,
+     "f1": 0.391653290529695,
+     "support": 200
+    },
+    "DATATYPE_MISMATCH": {
+     "precision": 0.6507936507936508,
+     "recall": 0.615,
+     "f1": 0.6323907455012854,
+     "support": 200
+    },
+    "AMBIGUOUS_REFERENCE": {
+     "precision": 0.7458563535911602,
+     "recall": 0.675,
+     "f1": 0.7086614173228346,
+     "support": 200
+    },
+    "SEMANTIC_ERROR": {
+     "precision": 0.9424460431654677,
+     "recall": 0.655,
+     "f1": 0.7728613569321534,
+     "support": 200
+    }
+   },
+   "confusion_matrix": [
+    [
+     19,
+     1,
+     33,
+     119,
+     20,
+     8,
+     0
+    ],
+    [
+     14,
+     38,
+     32,
+     88,
+     14,
+     9,
+     5
+    ],
+    [
+     3,
+     1,
+     176,
+     8,
+     5,
+     7,
+     0
+    ],
+    [
+     17,
+     0,
+     35,
+     122,
+     16,
+     9,
+     1
+    ],
+    [
+     6,
+     0,
+     23,
+     42,
+     123,
+     5,
+     1
+    ],
+    [
+     3,
+     0,
+     33,
+     23,
+     5,
+     135,
+     1
+    ],
+    [
+     2,
+     1,
+     31,
+     21,
+     6,
+     8,
+     131
+    ]
+   ],
+   "macro_roc_auc": 0.8759535714285713,
+   "ece": 0.11957984528705519,
+   "ci95": {
+    "accuracy": [
+     0.5042857142857143,
+     0.557875
+    ],
+    "macro_f1": [
+     0.4870747501587316,
+     0.5368811360765027
+    ]
+   },
+   "train_seconds": 61.35257863998413
+  },
+  "CodeBERTa-small-v1": {
+   "accuracy": 0.8528571428571429,
+   "macro_precision": 0.8748427924079313,
+   "macro_recall": 0.852857142857143,
+   "macro_f1": 0.8560544504410569,
+   "per_class": {
+    "CORRECT": {
+     "precision": 0.5675675675675675,
+     "recall": 0.84,
+     "f1": 0.6774193548387096,
+     "support": 200
+    },
+    "SYNTAX_ERROR": {
+     "precision": 1.0,
+     "recall": 0.765,
+     "f1": 0.8668555240793201,
+     "support": 200
+    },
+    "UNKNOWN_TABLE": {
+     "precision": 0.9845360824742269,
+     "recall": 0.955,
+     "f1": 0.9695431472081218,
+     "support": 200
+    },
+    "UNKNOWN_COLUMN": {
+     "precision": 0.7597402597402597,
+     "recall": 0.585,
+     "f1": 0.6610169491525424,
+     "support": 200
+    },
+    "DATATYPE_MISMATCH": {
+     "precision": 0.9241706161137441,
+     "recall": 0.975,
+     "f1": 0.948905109489051,
+     "support": 200
+    },
+    "AMBIGUOUS_REFERENCE": {
+     "precision": 0.9481865284974094,
+     "recall": 0.915,
+     "f1": 0.9312977099236641,
+     "support": 200
+    },
+    "SEMANTIC_ERROR": {
+     "precision": 0.9396984924623115,
+     "recall": 0.935,
+     "f1": 0.9373433583959899,
+     "support": 200
+    }
+   },
+   "confusion_matrix": [
+    [
+     168,
+     0,
+     1,
+     19,
+     7,
+     2,
+     3
+    ],
+    [
+     36,
+     153,
+     0,
+     4,
+     1,
+     3,
+     3
+    ],
+    [
+     2,
+     0,
+     191,
+     4,
+     0,
+     3,
+     0
+    ],
+    [
+     71,
+     0,
+     0,
+     117,
+     8,
+     1,
+     3
+    ],
+    [
+     2,
+     0,
+     0,
+     3,
+     195,
+     0,
+     0
+    ],
+    [
+     7,
+     0,
+     2,
+     5,
+     0,
+     183,
+     3
+    ],
+    [
+     10,
+     0,
+     0,
+     2,
+     0,
+     1,
+     187
+    ]
+   ],
+   "macro_roc_auc": 0.9778315476190477,
+   "ece": 0.05103581743580956,
+   "ci95": {
+    "accuracy": [
+     0.8342857142857143,
+     0.8714285714285714
+    ],
+    "macro_f1": [
+     0.8402034916873288,
+     0.8728827319991667
+    ]
+   },
+   "throughput_qps": 2.2844734768470354,
+   "per_operator": {
+    "AMBIGUOUS_REFERENCE/amb_duplicate_alias": {
+     "accuracy": 0.9591836734693877,
+     "n": 98
+    },
+    "AMBIGUOUS_REFERENCE/amb_self_join": {
+     "accuracy": 0.95,
+     "n": 20
+    },
+    "AMBIGUOUS_REFERENCE/amb_unqualify": {
+     "accuracy": 0.8536585365853658,
+     "n": 82
+    },
+    "CORRECT/none": {
+     "accuracy": 0.84,
+     "n": 200
+    },
+    "DATATYPE_MISMATCH/dt_aggregate": {
+     "accuracy": 0.9714285714285714,
+     "n": 35
+    },
+    "DATATYPE_MISMATCH/dt_literal": {
+     "accuracy": 0.9629629629629629,
+     "n": 54
+    },
+    "DATATYPE_MISMATCH/dt_predicate": {
+     "accuracy": 0.9819819819819819,
+     "n": 111
+    },
+    "SEMANTIC_ERROR/sem_aggregate_in_where": {
+     "accuracy": 0.95,
+     "n": 40
+    },
+    "SEMANTIC_ERROR/sem_drop_group_by": {
+     "accuracy": 0.6428571428571429,
+     "n": 14
+    },
+    "SEMANTIC_ERROR/sem_drop_join_condition": {
+     "accuracy": 1.0,
+     "n": 30
+    },
+    "SEMANTIC_ERROR/sem_function_typo": {
+     "accuracy": 1.0,
+     "n": 36
+    },
+    "SEMANTIC_ERROR/sem_having_to_where": {
+     "accuracy": 1.0,
+     "n": 3
+    },
+    "SEMANTIC_ERROR/sem_null_compare": {
+     "accuracy": 1.0,
+     "n": 38
+    },
+    "SEMANTIC_ERROR/sem_order_position": {
+     "accuracy": 1.0,
+     "n": 27
+    },
+    "SEMANTIC_ERROR/sem_set_op_arity": {
+     "accuracy": 1.0,
+     "n": 1
+    },
+    "SEMANTIC_ERROR/sem_subquery_arity": {
+     "accuracy": 1.0,
+     "n": 1
+    },
+    "SEMANTIC_ERROR/sem_ungrouped_column": {
+     "accuracy": 0.4,
+     "n": 10
+    },
+    "SYNTAX_ERROR/syn_dangling_operator": {
+     "accuracy": 0.5,
+     "n": 24
+    },
+    "SYNTAX_ERROR/syn_drop_comma": {
+     "accuracy": 0.75,
+     "n": 8
+    },
+    "SYNTAX_ERROR/syn_drop_keyword": {
+     "accuracy": 0.8823529411764706,
+     "n": 34
+    },
+    "SYNTAX_ERROR/syn_duplicate_keyword": {
+     "accuracy": 0.16666666666666666,
+     "n": 18
+    },
+    "SYNTAX_ERROR/syn_keyword_typo": {
+     "accuracy": 0.9777777777777777,
+     "n": 45
+    },
+    "SYNTAX_ERROR/syn_parenthesis": {
+     "accuracy": 0.9722222222222222,
+     "n": 36
+    },
+    "SYNTAX_ERROR/syn_split_by": {
+     "accuracy": 0.125,
+     "n": 8
+    },
+    "SYNTAX_ERROR/syn_trailing_comma": {
+     "accuracy": 1.0,
+     "n": 22
+    },
+    "SYNTAX_ERROR/syn_unclosed_quote": {
+     "accuracy": 0.0,
+     "n": 5
+    },
+    "UNKNOWN_COLUMN/col_rename": {
+     "accuracy": 0.585,
+     "n": 200
+    },
+    "UNKNOWN_TABLE/tab_rename": {
+     "accuracy": 0.955,
+     "n": 200
+    }
+   }
+  },
+  "CodeBERTa-small-v1 (no schema input)": {
+   "accuracy": 0.4607142857142857,
+   "macro_precision": 0.6658605548214112,
+   "macro_recall": 0.4607142857142857,
+   "macro_f1": 0.4553109660219888,
+   "per_class": {
+    "CORRECT": {
+     "precision": 0.0,
+     "recall": 0.0,
+     "f1": 0.0,
+     "support": 200
+    },
+    "SYNTAX_ERROR": {
+     "precision": 1.0,
+     "recall": 0.48,
+     "f1": 0.6486486486486487,
+     "support": 200
+    },
+    "UNKNOWN_TABLE": {
+     "precision": 0.21013727560718057,
+     "recall": 0.995,
+     "f1": 0.3469921534437663,
+     "support": 200
+    },
+    "UNKNOWN_COLUMN": {
+     "precision": 0.5,
+     "recall": 0.005,
+     "f1": 0.009900990099009901,
+     "support": 200
+    },
+    "DATATYPE_MISMATCH": {
+     "precision": 0.9765625,
+     "recall": 0.625,
+     "f1": 0.7621951219512195,
+     "support": 200
+    },
+    "AMBIGUOUS_REFERENCE": {
+     "precision": 0.9893617021276596,
+     "recall": 0.465,
+     "f1": 0.6326530612244898,
+     "support": 200
+    },
+    "SEMANTIC_ERROR": {
+     "precision": 0.9849624060150376,
+     "recall": 0.655,
+     "f1": 0.7867867867867868,
+     "support": 200
+    }
+   },
+   "confusion_matrix": [
+    [
+     0,
+     0,
+     198,
+     0,
+     1,
+     0,
+     1
+    ],
+    [
+     0,
+     96,
+     103,
+     0,
+     0,
+     0,
+     1
+    ],
+    [
+     0,
+     0,
+     199,
+     0,
+     0,
+     1,
+     0
+    ],
+    [
+     0,
+     0,
+     197,
+     1,
+     2,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     74,
+     1,
+     125,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     107,
+     0,
+     0,
+     93,
+     0
+    ],
+    [
+     0,
+     0,
+     69,
+     0,
+     0,
+     0,
+     131
+    ]
+   ],
+   "macro_roc_auc": 0.8157333333333333,
+   "ece": 0.4533538467330592,
+   "ci95": {
+    "accuracy": [
+     0.4342857142857143,
+     0.48858928571428567
+    ],
+    "macro_f1": [
+     0.4372547708057344,
+     0.47380469344160064
+    ]
+   },
+   "throughput_qps": 4.872874770596751,
+   "per_operator": {
+    "AMBIGUOUS_REFERENCE/amb_duplicate_alias": {
+     "accuracy": 0.6122448979591837,
+     "n": 98
+    },
+    "AMBIGUOUS_REFERENCE/amb_self_join": {
+     "accuracy": 0.65,
+     "n": 20
+    },
+    "AMBIGUOUS_REFERENCE/amb_unqualify": {
+     "accuracy": 0.24390243902439024,
+     "n": 82
+    },
+    "CORRECT/none": {
+     "accuracy": 0.0,
+     "n": 200
+    },
+    "DATATYPE_MISMATCH/dt_aggregate": {
+     "accuracy": 0.8285714285714286,
+     "n": 35
+    },
+    "DATATYPE_MISMATCH/dt_literal": {
+     "accuracy": 0.3148148148148148,
+     "n": 54
+    },
+    "DATATYPE_MISMATCH/dt_predicate": {
+     "accuracy": 0.7117117117117117,
+     "n": 111
+    },
+    "SEMANTIC_ERROR/sem_aggregate_in_where": {
+     "accuracy": 0.875,
+     "n": 40
+    },
+    "SEMANTIC_ERROR/sem_drop_group_by": {
+     "accuracy": 0.0,
+     "n": 14
+    },
+    "SEMANTIC_ERROR/sem_drop_join_condition": {
+     "accuracy": 0.4,
+     "n": 30
+    },
+    "SEMANTIC_ERROR/sem_function_typo": {
+     "accuracy": 0.7222222222222222,
+     "n": 36
+    },
+    "SEMANTIC_ERROR/sem_having_to_where": {
+     "accuracy": 0.0,
+     "n": 3
+    },
+    "SEMANTIC_ERROR/sem_null_compare": {
+     "accuracy": 0.9736842105263158,
+     "n": 38
+    },
+    "SEMANTIC_ERROR/sem_order_position": {
+     "accuracy": 0.7777777777777778,
+     "n": 27
+    },
+    "SEMANTIC_ERROR/sem_set_op_arity": {
+     "accuracy": 0.0,
+     "n": 1
+    },
+    "SEMANTIC_ERROR/sem_subquery_arity": {
+     "accuracy": 0.0,
+     "n": 1
+    },
+    "SEMANTIC_ERROR/sem_ungrouped_column": {
+     "accuracy": 0.0,
+     "n": 10
+    },
+    "SYNTAX_ERROR/syn_dangling_operator": {
+     "accuracy": 0.041666666666666664,
+     "n": 24
+    },
+    "SYNTAX_ERROR/syn_drop_comma": {
+     "accuracy": 0.5,
+     "n": 8
+    },
+    "SYNTAX_ERROR/syn_drop_keyword": {
+     "accuracy": 0.4117647058823529,
+     "n": 34
+    },
+    "SYNTAX_ERROR/syn_duplicate_keyword": {
+     "accuracy": 0.0,
+     "n": 18
+    },
+    "SYNTAX_ERROR/syn_keyword_typo": {
+     "accuracy": 0.7333333333333333,
+     "n": 45
+    },
+    "SYNTAX_ERROR/syn_parenthesis": {
+     "accuracy": 0.6111111111111112,
+     "n": 36
+    },
+    "SYNTAX_ERROR/syn_split_by": {
+     "accuracy": 0.0,
+     "n": 8
+    },
+    "SYNTAX_ERROR/syn_trailing_comma": {
+     "accuracy": 1.0,
+     "n": 22
+    },
+    "SYNTAX_ERROR/syn_unclosed_quote": {
+     "accuracy": 0.0,
+     "n": 5
+    },
+    "UNKNOWN_COLUMN/col_rename": {
+     "accuracy": 0.005,
+     "n": 200
+    },
+    "UNKNOWN_TABLE/tab_rename": {
+     "accuracy": 0.995,
+     "n": 200
+    }
+   }
+  }
+ },
+ "main_model": "CodeBERTa-small-v1",
+ "latency": {
+  "mean_ms": 285.28930476628983,
+  "p95_ms": 487.16153464920336
+ },
+ "training_curve": true,
+ "analyzer_latency_ms": 0.8740160300034664,
+ "significance": {
+  "CodeBERTa-small-v1 vs TF-IDF": {
+   "only_a": 505,
+   "only_b": 55,
+   "p_value": 4.2637377882414405e-92
+  },
+  "CodeBERTa-small-v1 vs no-schema ablation": {
+   "only_a": 558,
+   "only_b": 9,
+   "p_value": 6.589158160796557e-152
+  }
+ },
+ "gold_audit": {
+  "total": 8034,
+  "pass_rate": 0.9645257654966393,
+  "counts": {
+   "CORRECT": 7749,
+   "SEMANTIC_ERROR": 119,
+   "DATATYPE_MISMATCH": 163,
+   "UNKNOWN_TABLE": 1,
+   "SYNTAX_ERROR": 2
+  },
+  "examples": {
+   "SEMANTIC_ERROR": [
+    {
+     "db_id": "bike_1",
+     "sql": "SELECT start_station_name ,  start_station_id FROM trip WHERE start_date LIKE \"8/%\" GROUP BY start_station_name ORDER BY COUNT(*) DESC LIMIT 1",
+     "issue": "Column 'start_station_id' must appear in GROUP BY or be used in an aggregate function."
+    },
+    {
+     "db_id": "bike_1",
+     "sql": "SELECT T1.id FROM trip AS T1 JOIN weather AS T2 ON T1.zip_code  =  T2.zip_code GROUP BY T2.zip_code HAVING avg(T2.mean_temperature_f)  >  60",
+     "issue": "Column 'T1.id' must appear in GROUP BY or be used in an aggregate function."
+    },
+    {
+     "db_id": "bike_1",
+     "sql": "SELECT start_station_id ,  start_station_name FROM trip GROUP BY start_station_name HAVING COUNT(*)  >=  200",
+     "issue": "Column 'start_station_id' must appear in GROUP BY or be used in an aggregate function."
+    }
+   ],
+   "DATATYPE_MISMATCH": [
+    {
+     "db_id": "product_catalog",
+     "sql": "SELECT catalog_entry_name FROM catalog_contents WHERE LENGTH  <  3 OR width  >  5",
+     "issue": "Text column 'width' is compared with the number 5; quote the value."
+    },
+    {
+     "db_id": "product_catalog",
+     "sql": "SELECT t1.attribute_name ,  t1.attribute_id FROM Attribute_Definitions AS t1 JOIN Catalog_Contents_Additional_Attributes AS t2 ON t1.attribute_id  =  t2.attribute_id WHERE t2.attribute_value  =  0",
+     "issue": "Text column 't2.attribute_value' is compared with the number 0; quote the value."
+    },
+    {
+     "db_id": "coffee_shop",
+     "sql": "SELECT avg(num_of_staff) ,  avg(score) FROM shop",
+     "issue": "AVG() is applied to the text column 'num_of_staff'."
+    }
+   ],
+   "UNKNOWN_TABLE": [
+    {
+     "db_id": "assets_maintenance",
+     "sql": "SELECT T1.company_name FROM Third_Party_Companies AS T1 JOIN Maintenance_Contracts AS T2 ON T1.company_id  =  T2.maintenance_contract_company_id JOIN Ref_Company_Types AS T3 ON T1.company_type_code  =  T3.company_type_code ORDER BY T2.contract_end_date DESC LIMIT 1",
+     "issue": "Table 'Ref_Company_Types' does not exist in the schema."
+    }
+   ],
+   "SYNTAX_ERROR": [
+    {
+     "db_id": "document_management",
+     "sql": "SELECT document_name FROM documents GROUP BY document_type_code ORDER BY count(*) DESC LIMIT 3 INTERSECT SELECT document_name FROM documents GROUP BY document_structure_code ORDER BY count(*) DESC LIMIT 3",
+     "issue": "Syntax error: ORDER BY clause should come after INTERSECT not before."
+    }
+   ]
+  }
+ },
+ "permissions": {
+  "n": 400,
+  "accuracy": 1.0,
+  "violations": 200
+ },
+ "repair": {
+  "AMBIGUOUS_REFERENCE": {
+   "n": 200,
+   "verified_rate": 0.9,
+   "exact_rate": 0.84
+  },
+  "ALL": {
+   "n": 1200,
+   "verified_rate": 0.8633333333333333,
+   "exact_rate": 0.6341666666666667
+  },
+  "AMBIGUOUS_REFERENCE/amb_unqualify": {
+   "n": 82,
+   "verified_rate": 1.0,
+   "exact_rate": 0.9634146341463414
+  },
+  "UNKNOWN_COLUMN": {
+   "n": 200,
+   "verified_rate": 0.79,
+   "exact_rate": 0.68
+  },
+  "UNKNOWN_COLUMN/col_rename": {
+   "n": 200,
+   "verified_rate": 0.79,
+   "exact_rate": 0.68
+  },
+  "SEMANTIC_ERROR": {
+   "n": 200,
+   "verified_rate": 0.93,
+   "exact_rate": 0.31
+  },
+  "SEMANTIC_ERROR/sem_ungrouped_column": {
+   "n": 10,
+   "verified_rate": 1.0,
+   "exact_rate": 0.0
+  },
+  "SYNTAX_ERROR": {
+   "n": 200,
+   "verified_rate": 0.98,
+   "exact_rate": 0.93
+  },
+  "SYNTAX_ERROR/syn_dangling_operator": {
+   "n": 24,
+   "verified_rate": 0.9166666666666666,
+   "exact_rate": 0.8333333333333334
+  },
+  "SYNTAX_ERROR/syn_drop_keyword": {
+   "n": 34,
+   "verified_rate": 0.9411764705882353,
+   "exact_rate": 0.8529411764705882
+  },
+  "DATATYPE_MISMATCH": {
+   "n": 200,
+   "verified_rate": 0.605,
+   "exact_rate": 0.09
+  },
+  "DATATYPE_MISMATCH/dt_predicate": {
+   "n": 111,
+   "verified_rate": 0.3783783783783784,
+   "exact_rate": 0.0
+  },
+  "SYNTAX_ERROR/syn_keyword_typo": {
+   "n": 45,
+   "verified_rate": 1.0,
+   "exact_rate": 0.9111111111111111
+  },
+  "UNKNOWN_TABLE": {
+   "n": 200,
+   "verified_rate": 0.975,
+   "exact_rate": 0.955
+  },
+  "UNKNOWN_TABLE/tab_rename": {
+   "n": 200,
+   "verified_rate": 0.975,
+   "exact_rate": 0.955
+  },
+  "AMBIGUOUS_REFERENCE/amb_duplicate_alias": {
+   "n": 98,
+   "verified_rate": 0.9591836734693877,
+   "exact_rate": 0.9081632653061225
+  },
+  "SEMANTIC_ERROR/sem_null_compare": {
+   "n": 38,
+   "verified_rate": 1.0,
+   "exact_rate": 0.0
+  },
+  "SYNTAX_ERROR/syn_drop_comma": {
+   "n": 8,
+   "verified_rate": 1.0,
+   "exact_rate": 1.0
+  },
+  "SEMANTIC_ERROR/sem_drop_group_by": {
+   "n": 14,
+   "verified_rate": 1.0,
+   "exact_rate": 0.7857142857142857
+  },
+  "DATATYPE_MISMATCH/dt_literal": {
+   "n": 54,
+   "verified_rate": 0.8148148148148148,
+   "exact_rate": 0.3333333333333333
+  },
+  "SYNTAX_ERROR/syn_split_by": {
+   "n": 8,
+   "verified_rate": 1.0,
+   "exact_rate": 0.875
+  },
+  "SEMANTIC_ERROR/sem_function_typo": {
+   "n": 36,
+   "verified_rate": 1.0,
+   "exact_rate": 1.0
+  },
+  "SYNTAX_ERROR/syn_parenthesis": {
+   "n": 36,
+   "verified_rate": 1.0,
+   "exact_rate": 1.0
+  },
+  "SEMANTIC_ERROR/sem_order_position": {
+   "n": 27,
+   "verified_rate": 1.0,
+   "exact_rate": 0.2222222222222222
+  },
+  "SEMANTIC_ERROR/sem_aggregate_in_where": {
+   "n": 40,
+   "verified_rate": 0.675,
+   "exact_rate": 0.0
+  },
+  "SYNTAX_ERROR/syn_unclosed_quote": {
+   "n": 5,
+   "verified_rate": 1.0,
+   "exact_rate": 1.0
+  },
+  "SYNTAX_ERROR/syn_duplicate_keyword": {
+   "n": 18,
+   "verified_rate": 1.0,
+   "exact_rate": 1.0
+  },
+  "SYNTAX_ERROR/syn_trailing_comma": {
+   "n": 22,
+   "verified_rate": 1.0,
+   "exact_rate": 1.0
+  },
+  "DATATYPE_MISMATCH/dt_aggregate": {
+   "n": 35,
+   "verified_rate": 1.0,
+   "exact_rate": 0.0
+  },
+  "SEMANTIC_ERROR/sem_drop_join_condition": {
+   "n": 30,
+   "verified_rate": 0.9666666666666667,
+   "exact_rate": 0.16666666666666666
+  },
+  "SEMANTIC_ERROR/sem_subquery_arity": {
+   "n": 1,
+   "verified_rate": 1.0,
+   "exact_rate": 1.0
+  },
+  "SEMANTIC_ERROR/sem_having_to_where": {
+   "n": 3,
+   "verified_rate": 1.0,
+   "exact_rate": 0.6666666666666666
+  },
+  "AMBIGUOUS_REFERENCE/amb_self_join": {
+   "n": 20,
+   "verified_rate": 0.2,
+   "exact_rate": 0.0
+  },
+  "SEMANTIC_ERROR/sem_set_op_arity": {
+   "n": 1,
+   "verified_rate": 1.0,
+   "exact_rate": 1.0
+  },
+  "latency_ms": {
+   "mean": 30.96423339497657,
+   "p95": 202.60841941199007
+  }
+ },
+ "generator": "cssupport/t5-small-awesome-text-to-sql",
+ "nl2sql": {
+  "n": 150,
+  "raw_validity": 0.3466666666666667,
+  "selected_validity": 0.43333333333333335,
+  "final_validity": 0.6666666666666666,
+  "raw_execution_accuracy": 0.16,
+  "selected_execution_accuracy": 0.2,
+  "final_execution_accuracy": 0.22,
+  "mean_generation_ms": 4100.066666666666,
+  "status_counts": {
+   "invalid": 50,
+   "repaired": 35,
+   "valid": 52,
+   "valid_alternative": 13
+  },
+  "invalid_raw_examples": [
+   {
+    "question": "What is the name of the visitor who visited both a museum opened before 2009 and a museum opened after 2011?",
+    "raw": "SELECT T2.Name, T2.Name FROM museum AS T1 JOIN visitor AS T2 ON T1.Museum_ID = T2.Museum_ID WHERE T1.Open_Year  2009 INTERSECT SELECT T2.Name FROM museum AS T1 JOIN visit AS T2 ON T1.Museum_ID = T2.Museum_ID WHERE T1.Open_Year > 2011",
+    "raw_error": "SYNTAX_ERROR",
+    "final": "SELECT T2.Name, T2.Name FROM museum AS T1 JOIN visitor AS T2 ON T1.Museum_ID = T2.Museum_ID WHERE T1.Open_Year  2009 INTERSECT SELECT T2.Name FROM museum AS T1 JOIN visit AS T2 ON T1.Museum_ID = T2.Museum_ID WHERE T1.Open_Year > 2011",
+    "status": "invalid"
+   },
+   {
+    "question": "What is the TV Channel that shows the cartoon \"The Rise of the Blue Beetle!\"? List the TV Channel's series name.",
+    "raw": "SELECT T1.series_name FROM TV_Channel AS T1 JOIN Cartoon AS T2 ON T1.Channel = T2.Channel WHERE T2.Title = \"The Rise of the Blue Beetle!\"",
+    "raw_error": "UNKNOWN_COLUMN",
+    "final": "SELECT T1.series_name FROM TV_Channel AS T1 JOIN Cartoon AS T2 ON T1.id = T2.Channel WHERE T2.Title = \"The Rise of the Blue Beetle!\"",
+    "status": "repaired"
+   },
+   {
+    "question": "How many car models are produced by each maker ? Only list the count and the maker full name .",
+    "raw": "SELECT COUNT(*), T1.FullName FROM car_makers AS T1 JOIN countries AS T2 ON T1.CountryId = T2.CountryId GROUP BY T1.FullName",
+    "raw_error": "UNKNOWN_COLUMN",
+    "final": "SELECT COUNT(*), T1.FullName FROM car_makers AS T1 JOIN countries AS T2 ON T1.Country = T2.CountryId GROUP BY T1.FullName",
+    "status": "repaired"
+   },
+   {
+    "question": "Which employee received the most awards in evaluations? Give me the employee name.",
+    "raw": "SELECT Employee_name, Employee_ID FROM evaluation GROUP BY Employee_ID ORDER BY COUNT(*) DESC LIMIT 1",
+    "raw_error": "UNKNOWN_COLUMN",
+    "final": "SELECT Employee_ID, Employee_ID FROM evaluation GROUP BY Employee_ID ORDER BY COUNT(*) DESC LIMIT 1",
+    "status": "repaired"
+   },
+   {
+    "question": "What are the names of players who won in both 2013 and 2016?",
+    "raw": "SELECT first_name, last_name, last_name FROM players WHERE year = 2013 INTERSECT SELECT player_name FROM players WHERE year = 2016",
+    "raw_error": "UNKNOWN_COLUMN",
+    "final": "SELECT first_name, last_name, last_name FROM players WHERE year = 2013 INTERSECT SELECT player_name FROM players WHERE year = 2016",
+    "status": "invalid"
+   },
+   {
+    "question": "What is the last transcript release date?",
+    "raw": "SELECT department_name, department_id FROM Courses GROUP BY department_name ORDER BY department_name",
+    "raw_error": "UNKNOWN_COLUMN",
+    "final": "SELECT department_name, department_id FROM Courses GROUP BY department_name ORDER BY department_name",
+    "status": "invalid"
+   },
+   {
+    "question": "What are the countries that have cartoons on TV that were written by Todd Casey?",
+    "raw": "SELECT Country, COUNT(Country) FROM TV_Channel AS T1 JOIN Cartoon AS T2 ON T1.Channel = T2.Channel WHERE T2.Writed_by = 'Todd Casey'",
+    "raw_error": "UNKNOWN_COLUMN",
+    "final": "SELECT Country, COUNT(Country) FROM TV_Channel AS T1 JOIN Cartoon AS T2 ON T1.id = T2.Channel WHERE T2.Written_by = 'Todd Casey' GROUP BY Country",
+    "status": "repaired"
+   },
+   {
+    "question": "What is the official language spoken in the country whose head of state is Beatrix?",
+    "raw": "SELECT T1.Language, T1.Language FROM country AS T1 JOIN countrylanguage AS T2 ON T1.CountryCode = T2.CountryCode WHERE T2.HeadOfState = \"Brittrix\"",
+    "raw_error": "UNKNOWN_COLUMN",
+    "final": "SELECT T2.Language, T2.Language FROM country AS T1 JOIN countrylanguage AS T2 ON T1.Code = T2.CountryCode WHERE T1.HeadOfState = \"Brittrix\"",
+    "status": "repaired"
+   }
+  ]
+ },
+ "attributions": [
+  {
+   "class": "UNKNOWN_COLUMN",
+   "sql": "SELECT Musical_ID FROM orchestra GROUP BY Major_Record_Format ORDER BY COUNT(*) ASC",
+   "top_tokens": [
+    "FROM",
+    "_",
+    "ID"
+   ],
+   "figure": "xai_unknown_column.png"
+  },
+  {
+   "class": "SYNTAX_ERROR",
+   "sql": "SELECT first_name ,  last_name FROM players s birth_date",
+   "top_tokens": [
+    "s",
+    "players",
+    "last"
+   ],
+   "figure": "xai_syntax_error.png"
+  },
+  {
+   "class": "SEMANTIC_ERROR",
+   "sql": "SELECT counts(DISTINCT template_id) FROM Documents",
+   "top_tokens": [
+    "counts",
+    "(",
+    ")"
+   ],
+   "figure": "xai_semantic_error.png"
+  }
+ ]
+}
