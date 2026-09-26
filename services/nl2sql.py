@@ -2,10 +2,11 @@
 # Clean Architecture: Use Case Layer
 # Natural language -> SQL, with verification and repair of the generated query.
 #
-#   1. The generator proposes several candidates (beam search).
+#   1. The generator proposes its best candidate; only if the analyzer rejects it are further
+#      candidates generated (keeps the common case fast on CPU).
 #   2. Each candidate is checked by the analyzer against the schema; the first valid one wins.
-#   3. If none is valid, the most confident candidate is passed to the repair engine and the
-#      repaired query is re-verified.
+#   3. If none is valid, the top candidate is passed to the repair engine and the repaired
+#      query is re-verified.
 
 from typing import Any, Dict, Optional
 
@@ -21,12 +22,17 @@ class NL2SQLService:
         self.num_candidates = num_candidates
 
     def run(self, question: str, schema: DatabaseSchema, num_candidates: Optional[int] = None) -> Dict[str, Any]:
-        gen = self.generator.generate(question, schema, num_candidates or self.num_candidates)
-        checked = []
-        for rank, cand in enumerate(gen["candidates"]):
-            analysis = self.diagnosis.analyzer.analyze(cand["sql"], schema)
-            checked.append({**cand, "rank": rank + 1, "error_class": analysis.error_class,
-                            "issues": [i.message for i in analysis.issues]})
+        k = num_candidates or self.num_candidates
+        gen = self.generator.generate(question, schema, 1)
+        pool = list(gen["candidates"])
+        elapsed = gen["inference_time_ms"]
+        checked = self._check(pool, schema)
+        if k > 1 and not any(c["error_class"] == "CORRECT" for c in checked):
+            more = self.generator.generate(question, schema, k)
+            elapsed += more["inference_time_ms"]
+            known = {c["sql"].lower() for c in pool}
+            pool += [c for c in more["candidates"] if c["sql"].lower() not in known][:k - len(pool)]
+            checked = self._check(pool, schema)
 
         chosen = next((c for c in checked if c["error_class"] == "CORRECT"), None)
         repair = None
@@ -49,5 +55,13 @@ class NL2SQLService:
             "diagnosis": diagnosis.to_dict() if diagnosis else None,
             "generator": gen["model"],
             "prompt_truncated": gen["prompt_truncated"],
-            "generation_time_ms": gen["inference_time_ms"],
+            "generation_time_ms": elapsed,
         }
+
+    def _check(self, candidates, schema):
+        out = []
+        for rank, cand in enumerate(candidates):
+            analysis = self.diagnosis.analyzer.analyze(cand["sql"], schema)
+            out.append({**cand, "rank": rank + 1, "error_class": analysis.error_class,
+                        "issues": [i.message for i in analysis.issues]})
+        return out

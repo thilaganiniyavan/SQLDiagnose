@@ -9,10 +9,10 @@ server:
 api:
   title: "SQLDiagnose API"
   version: "2.0.0"
-  model_dir: "models/checkpoints/codeberta-small/best"   # fine-tuned classifier (training/train.py output)
+  model_dir: "models/checkpoints/codeberta-small-ft/best"   # 3 epochs + 2 epochs continued fine-tuning   # fine-tuned classifier (training/train.py output)
   device: "cpu"                                          # cpu | cuda
   model_threshold: 0.8        # minimum model confidence for model-only verdicts / warnings
-  generator: "cssupport/t5-small-awesome-text-to-sql"
+  generator: "Qwen/Qwen2.5-Coder-0.5B-Instruct"   # or "cssupport/t5-small-awesome-text-to-sql" (smaller, faster, weaker)
   load_generator_on_startup: false   # otherwise loaded on the first /nl2sql request
   max_batch: 500
   enable_live_schema_parsing: true   # POST /schemas/parse-live connects to PostgreSQL/MySQL; disable when exposed publicly

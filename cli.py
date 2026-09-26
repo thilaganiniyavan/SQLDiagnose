@@ -98,10 +98,10 @@ def main():
     else:
         if schema is None:
             sys.exit("nl2sql needs a schema (--db, --schema, --ddl or --sqlite).")
-        from models.generator import T5SQLGenerator
+        from models.generator import load_generator
         from services.nl2sql import NL2SQLService
         cfg = load_config()["api"]
-        res = NL2SQLService(T5SQLGenerator(cfg["generator"]), service).run(args.text, schema)
+        res = NL2SQLService(load_generator(cfg["generator"]), service).run(args.text, schema)
         if args.json:
             print(json.dumps(res, indent=2))
             return
