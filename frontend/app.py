@@ -1,708 +1,359 @@
 # app.py
 # Clean Architecture: Frameworks & Drivers
-# Comprehensive Streamlit Dashboard exposing all NLP SQL classification, repair, NL2SQL, schema parsing, and telemetry services.
+# Streamlit UI for the SQLDiagnose API.
+#
+#   python -m streamlit run frontend/app.py
 
-import streamlit as st
-import requests
+import html
 import json
-import yaml
-import io
-import tempfile
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
+import os
 from pathlib import Path
-from typing import Dict, Any, List
-from datasets.schema_parser import DatabaseSchemaParser
+from typing import Any, Dict, List, Optional
 
-# 1. Set Page Config & Rich Aesthetics
-st.set_page_config(
-    page_title="SQL Diagnostics, Repair & NL2SQL Platform",
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+import pandas as pd
+import requests
+import streamlit as st
+import yaml
 
-# Custom CSS for glassmorphism styling and dark mode badges
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_config() -> Dict[str, Any]:
+    path = PROJECT_ROOT / "configs" / "frontend_config.yaml"
+    cfg = yaml.safe_load(path.read_text()).get("streamlit", {}) if path.exists() else {}
+    cfg["api_url"] = os.environ.get("SQLDIAGNOSE_API_URL", cfg.get("api_url", "http://127.0.0.1:8000/api/v1")).rstrip("/")
+    return cfg
+
+
+CFG = load_config()
+API = CFG["api_url"]
+TIMEOUT = CFG.get("request_timeout_s", 60)
+
+CLASS_COLORS = {
+    "CORRECT": "#22c55e", "SYNTAX_ERROR": "#ef4444", "UNKNOWN_TABLE": "#f97316", "UNKNOWN_COLUMN": "#f59e0b",
+    "DATATYPE_MISMATCH": "#a855f7", "AMBIGUOUS_REFERENCE": "#06b6d4", "PERMISSION_DENIED": "#e11d48",
+    "SEMANTIC_ERROR": "#3b82f6",
+}
+
+st.set_page_config(page_title=CFG.get("title", "SQLDiagnose"), page_icon="🩺", layout="wide")
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.2rem;
-        font-weight: 700;
-        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 0.2rem;
-    }
-    .sub-header {
-        font-size: 1.0rem;
-        color: #94a3b8;
-        margin-bottom: 1.5rem;
-    }
-    .metric-card {
-        background: rgba(30, 41, 59, 0.7);
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 15px;
-        text-align: center;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    }
-    .status-badge-ok {
-        background-color: #059669;
-        color: white;
-        padding: 4px 8px;
-        border-radius: 6px;
-        font-weight: 600;
-    }
-    .status-badge-err {
-        background-color: #dc2626;
-        color: white;
-        padding: 4px 8px;
-        border-radius: 6px;
-        font-weight: 600;
-    }
+.badge {display:inline-block;padding:4px 12px;border-radius:999px;font-weight:600;color:white;font-size:0.95rem}
+.sqlbox {font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background:#0b1220; border:1px solid #334155;
+         border-radius:8px; padding:10px 12px; white-space:pre-wrap; word-break:break-word; font-size:0.9rem}
+.tok {display:inline-block;margin:2px;padding:2px 5px;border-radius:4px;font-family:ui-monospace,monospace;font-size:0.85rem}
+.muted {color:#94a3b8;font-size:0.9rem}
 </style>
 """, unsafe_allow_html=True)
 
-# 2. Load Configuration
-def load_config() -> dict:
-    project_root = Path(__file__).resolve().parents[1]
-    config_path = project_root / "configs" / "frontend_config.yaml"
-    if config_path.exists():
-        with open(config_path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    return {
-        "streamlit": {
-            "title": "SQL Error Classifier Panel",
-            "api_url": "http://127.0.0.1:8000",
-            "show_confidence_threshold": 0.15,
-            "analytics": {"enable_history_tracking": True, "history_limit": 10}
-        }
-    }
 
-CONFIG = load_config()
-API_BASE_URL = CONFIG["streamlit"].get("api_url", "http://127.0.0.1:8000").rstrip("/")
-if "/api/v1" in API_BASE_URL:
-    API_BASE_URL = API_BASE_URL.split("/api/v1")[0]
-elif "/predict" in API_BASE_URL:
-    API_BASE_URL = API_BASE_URL.split("/predict")[0]
+# ---------------------------------------------------------------------- API helpers
+def api(method: str, path: str, timeout: Optional[float] = None, **kwargs) -> Optional[Any]:
+    try:
+        r = requests.request(method, f"{API}{path}", timeout=timeout or TIMEOUT, **kwargs)
+    except requests.RequestException:
+        st.error(f"Cannot reach the API at {API}. Start it with "
+                 "`python -m uvicorn deployment.api.main:app --port 8000`.")
+        return None
+    if r.status_code >= 400:
+        try:
+            detail = r.json().get("detail")
+        except ValueError:
+            detail = r.text
+        st.error(f"API error {r.status_code}: {detail}")
+        return None
+    return r.json()
 
-CLASS_NAMES = [
-    "CORRECT", "SYNTAX_ERROR", "UNKNOWN_TABLE", "UNKNOWN_COLUMN",
-    "DATATYPE_MISMATCH", "DUPLICATE_ALIAS", "PERMISSION_DENIED", "SEMANTIC_ERROR"
-]
 
-# Default Schema Catalogs
-DEFAULT_SCHEMAS = {
-    "University DB Schema": {
-        "students": {
-            "columns": {"id": "INTEGER", "name": "VARCHAR", "major": "VARCHAR", "gpa": "REAL", "advisor_id": "INTEGER"},
-            "primary_keys": ["id"],
-            "foreign_keys": []
-        },
-        "courses": {
-            "columns": {"id": "INTEGER", "title": "VARCHAR", "credits": "INTEGER", "department": "VARCHAR"},
-            "primary_keys": ["id"],
-            "foreign_keys": []
-        },
-        "enrollments": {
-            "columns": {"student_id": "INTEGER", "course_id": "INTEGER", "semester": "VARCHAR", "grade": "VARCHAR"},
-            "primary_keys": ["student_id", "course_id"],
-            "foreign_keys": [
-                {"column": "student_id", "target_table": "students", "target_column": "id"},
-                {"column": "course_id", "target_table": "courses", "target_column": "id"}
-            ]
-        }
-    },
-    "Company DB Schema": {
-        "employees": {
-            "columns": {"id": "INTEGER", "name": "VARCHAR", "role": "VARCHAR", "salary": "REAL", "dept_id": "INTEGER", "manager_id": "INTEGER"},
-            "primary_keys": ["id"],
-            "foreign_keys": []
-        },
-        "departments": {
-            "columns": {"id": "INTEGER", "name": "VARCHAR", "location": "VARCHAR", "budget": "REAL"},
-            "primary_keys": ["id"],
-            "foreign_keys": []
-        },
-        "works_on": {
-            "columns": {"emp_id": "INTEGER", "proj_id": "INTEGER", "hours": "REAL"},
-            "primary_keys": ["emp_id", "proj_id"],
-            "foreign_keys": [
-                {"column": "emp_id", "target_table": "employees", "target_column": "id"}
-            ]
-        }
-    },
-    "Custom Schema (JSON)": {}
-}
+@st.cache_data(ttl=10, show_spinner=False)
+def get_health():
+    try:
+        return requests.get(f"{API}/health", timeout=3).json()
+    except (requests.RequestException, ValueError):
+        return None
 
-# Session State Initialization
-if "history" not in st.session_state:
-    st.session_state["history"] = []
-if "sql_input" not in st.session_state:
-    st.session_state["sql_input"] = ""
-if "parsed_live_schema" not in st.session_state:
-    st.session_state["parsed_live_schema"] = None
 
-def add_to_history(query: str, error_class: str, confidence: float):
-    limit = CONFIG["streamlit"].get("analytics", {}).get("history_limit", 10)
-    history = st.session_state["history"]
-    if not history or history[0]["query"] != query:
-        history.insert(0, {"query": query, "class": error_class, "confidence": confidence})
-    if len(history) > limit:
-        history.pop()
-    st.session_state["history"] = history
+@st.cache_data(ttl=300, show_spinner=False)
+def get_example_dbs() -> List[str]:
+    try:
+        return requests.get(f"{API}/schemas", timeout=5).json()
+    except (requests.RequestException, ValueError):
+        return []
 
-# Custom Token Highlighter Function
-def render_token_highlights(tokens: List[str], attributions: List[str]) -> str:
-    html_elements = []
-    max_attr = max([abs(x) for x in attributions]) if attributions else 1.0
-    if max_attr == 0:
-        max_attr = 1.0
-        
-    for t, attr in zip(tokens, attributions):
-        token_str = t.replace("Ġ", " ").replace("<s>", "").replace("</s>", "")
-        if not token_str:
-            continue
-            
-        weight = abs(attr) / max_attr
-        alpha = min(0.65, max(0.08, weight * 0.5))
-        
-        if attr >= 0:
-            bg_color = f"rgba(43, 140, 190, {alpha})"
-            border = "rgba(43, 140, 190, 0.4)"
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_example_schema(db_id: str) -> Optional[Dict]:
+    try:
+        return requests.get(f"{API}/schemas/{db_id}", timeout=5).json()
+    except (requests.RequestException, ValueError):
+        return None
+
+
+def badge(cls: str) -> str:
+    return f'<span class="badge" style="background:{CLASS_COLORS.get(cls, "#64748b")}">{html.escape(cls)}</span>'
+
+
+def sql_box(sql: str) -> str:
+    return f'<div class="sqlbox">{html.escape(sql)}</div>'
+
+
+def token_html(tokens: List[Dict]) -> str:
+    peak = max((abs(t["score"]) for t in tokens), default=1.0) or 1.0
+    spans = []
+    for t in tokens:
+        w = abs(t["score"]) / peak
+        color = f"rgba(239,68,68,{0.12 + 0.6 * w:.2f})" if t["score"] > 0 else f"rgba(59,130,246,{0.12 + 0.5 * w:.2f})"
+        spans.append(f'<span class="tok" style="background:{color}" title="{t["score"]:+.4f}">{html.escape(t["token"])}</span>')
+    return "<div>" + "".join(spans) + "</div>"
+
+
+# ---------------------------------------------------------------------- session state
+ss = st.session_state
+ss.setdefault("history", [])
+ss.setdefault("custom_schema", None)
+ss.setdefault("query", "SELECT nme, count(*) FROM singer WHERE age > 'thirty'")
+
+# ---------------------------------------------------------------------- sidebar: status + schema context
+health = get_health()
+with st.sidebar:
+    st.header("SQLDiagnose")
+    if health:
+        st.success("API online")
+        if health["model_loaded"]:
+            m = health["model"]
+            f1 = (m.get("validation") or {}).get("macro_f1")
+            st.caption(f"Classifier: `{m.get('backbone')}`" + (f" · val macro-F1 {f1:.3f}" if f1 else ""))
         else:
-            bg_color = f"rgba(222, 45, 38, {alpha})"
-            border = "rgba(222, 45, 38, 0.4)"
-            
-        html_elements.append(
-            f'<span style="background-color: {bg_color}; border: 1px solid {border}; border-radius: 3px; padding: 2px 4px; margin: 2px; display: inline-block; font-family: monospace; color: #f8fafc;">'
-            f'{token_str}'
-            f'</span>'
-        )
-        
-    return '<div style="background-color: #1e293b; border-radius: 8px; padding: 12px; line-height: 1.8; border: 1px solid #334155;">' + "".join(html_elements) + '</div>'
-
-# Main App Title Layout
-st.markdown('<div class="main-header">🛡️ Intelligent SQL Diagnostics, Auto-Repair & NL2SQL Suite</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Clean Architecture | Transformer Feature Attributions | Schema Parser | Rule-Based Repairs | Local Text-to-SQL</div>', unsafe_allow_html=True)
-
-# Sidebar Configuration
-sidebar = st.sidebar
-sidebar.header("⚙️ System Control Center")
-
-# API Health Status Check
-server_connected = False
-try:
-    health_res = requests.get(f"{API_BASE_URL}/health", timeout=3)
-    if health_res.status_code == 200:
-        h_data = health_res.json()
-        device_flag = h_data.get("device", "cpu").upper()
-        sidebar.success(f"API Server: Online ({device_flag})")
-        server_connected = True
+            st.warning("No classifier checkpoint loaded — diagnoses use the deterministic analyzer only.")
+        st.caption(f"Generator: `{health.get('generator') or 'disabled'}`"
+                   + (" (loaded)" if health.get("generator_loaded") else " (loads on first use)"))
     else:
-        sidebar.error("API Server: Health Check Error")
-except Exception:
-    sidebar.error("API Server: Disconnected (Offline)")
+        st.error(f"API offline ({API})")
 
-# Active Database Schema Catalog Selection
-sidebar.subheader("🗄️ Active Database Schema")
+    st.subheader("Database schema")
+    dbs = get_example_dbs()
+    sources = ["Example database", "Custom schema", "No schema"]
+    source = st.radio("Schema source", sources, index=0 if dbs else 2, label_visibility="collapsed")
+    context: Dict[str, Any] = {}
+    active_tables: Dict[str, Any] = {}
+    if source == "Example database" and dbs:
+        default = CFG.get("default_database")
+        db_id = st.selectbox("Database", dbs, index=dbs.index(default) if default in dbs else 0)
+        context["db_id"] = db_id
+        info = get_example_schema(db_id)
+        active_tables = info["database_schema"] if info else {}
+    elif source == "Custom schema":
+        if ss.custom_schema:
+            st.caption("Using the schema from the *Schema* tab. Edit it below if needed.")
+        text = st.text_area("Schema JSON", value=json.dumps(ss.custom_schema or {
+            "users": {"columns": {"id": "INTEGER", "name": "TEXT", "age": "INTEGER"}, "primary_keys": ["id"]},
+            "orders": {"columns": {"id": "INTEGER", "user_id": "INTEGER", "total": "REAL"}, "primary_keys": ["id"],
+                       "foreign_keys": [{"column": "user_id", "target_table": "users", "target_column": "id"}]}},
+            indent=1), height=220)
+        try:
+            active_tables = json.loads(text)
+            context["database_schema"] = active_tables
+        except json.JSONDecodeError as e:
+            st.error(f"Invalid JSON: {e}")
+    else:
+        st.caption("Without a schema only grammar and schema-independent checks are verified.")
 
-schema_options = list(DEFAULT_SCHEMAS.keys())
-if st.session_state["parsed_live_schema"]:
-    schema_options.insert(0, "Live Parsed DB Schema")
+    if active_tables:
+        with st.expander(f"Tables ({len(active_tables)})"):
+            for t, info in active_tables.items():
+                cols = info.get("columns", {})
+                cols_txt = ", ".join(f"{c} {ty}" for c, ty in cols.items()) if isinstance(cols, dict) else ", ".join(map(str, cols))
+                st.markdown(f"**{t}**: {cols_txt}")
+        restricted = st.multiselect("Restricted tables (access policy)", list(active_tables))
+        if restricted:
+            context["access_policy"] = {"restricted_tables": restricted, "restricted_columns": []}
 
-schema_sel = sidebar.selectbox("Choose database schema:", schema_options)
-
-if schema_sel == "Live Parsed DB Schema" and st.session_state["parsed_live_schema"]:
-    active_schema = st.session_state["parsed_live_schema"]
-    sidebar.info("Using schema extracted via Database Schema Parser.")
-elif schema_sel == "Custom Schema (JSON)":
-    schema_json_input = sidebar.text_area(
-        "Paste custom database schema JSON:",
-        value='{\n  "users": {\n    "columns": {\n      "id": "INTEGER",\n      "name": "VARCHAR"\n    }\n  }\n}',
-        height=150
-    )
-    try:
-        active_schema = json.loads(schema_json_input)
-    except Exception:
-        sidebar.warning("Invalid JSON format. Schema context is empty.")
-        active_schema = {}
-else:
-    active_schema = DEFAULT_SCHEMAS.get(schema_sel, {})
-
-# Display Table Structure Preview
-if active_schema:
-    tables_summary = []
-    for t, val in active_schema.items():
-        cols = ", ".join([f"{k} ({v})" for k, v in val.get("columns", {}).items()])
-        tables_summary.append({"Table": t, "Columns": cols})
-    sidebar.dataframe(pd.DataFrame(tables_summary), hide_index=True)
-
-# Query Execution History Panel
-sidebar.subheader("⏳ Query History")
-if st.session_state["history"]:
-    for hist_idx, item in enumerate(st.session_state["history"]):
-        hist_label = f"Q{hist_idx+1}: {item['query'][:18]}... ({item['class']})"
-        if sidebar.button(hist_label, key=f"hist_{hist_idx}"):
-            st.session_state["sql_input"] = item["query"]
+    st.subheader("History")
+    if not ss.history:
+        st.caption("Nothing yet.")
+    for i, h in enumerate(ss.history):
+        if st.button(f"{h['class']}: {h['query'][:32]}", key=f"hist{i}", width="stretch"):
+            ss.query = h["query"]
             st.rerun()
-else:
-    sidebar.caption("No queries run in this session yet.")
 
-# Main Navigation Tabs: 5 Full Service Suites
-tab_single, tab_nl2sql, tab_batch, tab_schema, tab_metrics = st.tabs([
-    "🔍 Analyze & Repair", 
-    "✍️ Natural Language to SQL", 
-    "📂 Batch & File Processing", 
-    "🗄️ Database Schema Parser", 
-    "📊 Telemetry & Metrics"
-])
 
-# ----------------------------------------------------
-# TAB 1: Single Query Classification, Repair & XAI
-# ----------------------------------------------------
-with tab_single:
-    col_input, col_output = st.columns([1, 1])
-    
-    with col_input:
-        st.subheader("📝 SQL Query Input")
-        
-        uploaded_sql = st.file_uploader("Load SQL statement file (.sql)", type=["sql"])
-        if uploaded_sql is not None:
-            st.session_state["sql_input"] = uploaded_sql.read().decode("utf-8")
-            
-        sql_query_input = st.text_area(
-            "Enter SQL query string to evaluate:",
-            value=st.session_state["sql_input"],
-            placeholder="SELECT name FROM students JOIN enrollments...",
-            height=160,
-            key="query_text_area"
-        )
-        
-        analyze_btn = st.button("🚀 Analyze & Repair Query", type="primary")
-        
-    with col_output:
-        st.subheader("💡 Diagnostic & Auto-Repair Output")
-        if analyze_btn and sql_query_input.strip():
-            with st.spinner("Processing classifier prediction, attributions & repair routing..."):
-                predict_payload = {
-                    "sql_query": sql_query_input,
-                    "database_schema": active_schema,
-                    "explain": True
-                }
-                
-                try:
-                    res_predict = requests.post(f"{API_BASE_URL}/predict", json=predict_payload, timeout=12)
-                    if res_predict.status_code == 200:
-                        pred_data = res_predict.json()
-                        pred_class = pred_data["predicted_class"]
-                        confidence = pred_data["confidence"]
-                        latency_ms = pred_data["inference_time_ms"]
-                        
-                        add_to_history(sql_query_input, pred_class, confidence)
-                        
-                        if pred_class == "CORRECT":
-                            st.success(f"Category: **{pred_class}** (Confidence: {confidence*100:.1f}% | Latency: {latency_ms:.2f}ms)")
-                        else:
-                            st.error(f"Category: **{pred_class}** (Confidence: {confidence*100:.1f}% | Latency: {latency_ms:.2f}ms)")
-                            
-                        st.progress(confidence, text="Classifier Confidence Meter")
-                        
-                        # Probabilities distribution chart
-                        probs_df = pd.DataFrame([
-                            {"Class": item["class_name"], "Probability": item["probability"]}
-                            for item in pred_data["probabilities"]
-                        ])
-                        
-                        with st.expander("📊 View All Class Probability Distributions"):
-                            st.bar_chart(probs_df.set_index("Class"))
-                            
-                        # Repair routing
-                        class_index = CLASS_NAMES.index(pred_class) if pred_class in CLASS_NAMES else 0
-                        repair_payload = {
-                            "sql_query": sql_query_input,
-                            "predicted_class": class_index,
-                            "database_schema": active_schema
-                        }
-                        
-                        res_repair = requests.post(f"{API_BASE_URL}/repair", json=repair_payload, timeout=6)
-                        if res_repair.status_code == 200:
-                            rep_data = res_repair.json()
-                            
-                            st.markdown("### 🔧 Suggested Repair Engine Action")
-                            st.write(f"**Diagnosis Explanation**: {rep_data['explanation']}")
-                            st.write(f"**Recommended Action**: {rep_data['suggested_correction']}")
-                            
-                            if rep_data.get("corrected_query"):
-                                st.markdown("**Auto-Corrected SQL Query**:")
-                                st.code(rep_data["corrected_query"], language="sql")
-                                
-                            # XAI Token Attributions
-                            xai_data = pred_data.get("explanation")
-                            if xai_data and "tokens" in xai_data and "attributions" in xai_data:
-                                st.markdown("### 🧬 Token Feature Attributions")
-                                st.markdown(
-                                    "Attribution weights relative to predicted category "
-                                    "(<span style='color: #2b8cbe; font-weight: bold;'>teal</span> increases prediction, "
-                                    "<span style='color: #de2d26; font-weight: bold;'>red</span> decreases it):",
-                                    unsafe_allow_html=True
-                                )
-                                highlight_html = render_token_highlights(xai_data["tokens"], xai_data["attributions"])
-                                st.markdown(highlight_html, unsafe_allow_html=True)
-                                
-                                if "attention_map" in xai_data and xai_data["attention_map"]:
-                                    st.markdown("### 📊 Self-Attention Heatmap Matrix")
-                                    fig, ax = plt.subplots(figsize=(7, 5))
-                                    tokens = [t.replace("Ġ", " ").encode('ascii', errors='replace').decode('ascii') for t in xai_data["tokens"]]
-                                    sns.heatmap(
-                                        xai_data["attention_map"],
-                                        xticklabels=tokens,
-                                        yticklabels=tokens,
-                                        cmap="viridis",
-                                        ax=ax,
-                                        cbar=False
-                                    )
-                                    plt.xticks(rotation=45, ha="right", fontsize=8)
-                                    plt.yticks(fontsize=8)
-                                    plt.title("Attention Heatmap Matrix", fontsize=10, fontweight="bold")
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
-                                    plt.close()
-                                    
-                                # Report Download
-                                st.markdown("### 📑 Download Report")
-                                r_content = f"# SQL Error Classification & Repair Report\n\n"
-                                r_content += f"- **Target Query**: `{sql_query_input}`\n"
-                                r_content += f"- **Classification**: `{pred_class}` (Confidence: {confidence*100:.1f}%)\n"
-                                r_content += f"- **Explanation**: {rep_data['explanation']}\n"
-                                r_content += f"- **Correction**: {rep_data['suggested_correction']}\n"
-                                if rep_data.get("corrected_query"):
-                                    r_content += f"- **Corrected SQL**: `{rep_data['corrected_query']}`\n"
-                                    
-                                st.download_button(
-                                    label="📥 Download Diagnostic Report (Markdown)",
-                                    data=r_content,
-                                    file_name="sql_diagnostic_report.md",
-                                    mime="text/markdown"
-                                )
-                        else:
-                            st.warning("Could not contact auto-repair endpoint.")
+def remember(query: str, cls: str):
+    ss.history = [h for h in ss.history if h["query"] != query]
+    ss.history.insert(0, {"query": query, "class": cls})
+    del ss.history[CFG.get("history_limit", 15):]
+
+
+# ---------------------------------------------------------------------- tabs
+st.title("SQL diagnosis, repair and NL→SQL")
+tab_diag, tab_nl, tab_batch, tab_schema, tab_stats = st.tabs(
+    ["Diagnose & repair", "Question → SQL", "Batch", "Schema", "Service"])
+
+# ---- Diagnose & repair
+with tab_diag:
+    left, right = st.columns([1, 1], gap="large")
+    with left:
+        query = st.text_area("SQL query", key="query", height=180)
+        c1, c2 = st.columns(2)
+        explain = c1.toggle("Token attributions", value=True, disabled=not (health and health.get("model_loaded")))
+        method = c2.selectbox("Method", ["gxi", "ig"], format_func=lambda m: {"gxi": "Gradient × input (fast)",
+                                                                               "ig": "Integrated gradients"}[m],
+                              disabled=not explain)
+        run = st.button("Diagnose and repair", type="primary", width="stretch")
+    with right:
+        if run and query.strip():
+            with st.spinner("Analyzing ..."):
+                diag = api("POST", "/diagnose", json={"query": query, "explain": explain, "explain_method": method, **context})
+                rep = api("POST", "/repair", json={"query": query, **context}) if diag and diag["is_error"] else None
+            if diag:
+                remember(query, diag["error_class"])
+                st.markdown(f"{badge(diag['error_class'])} &nbsp; <span class='muted'>decided by "
+                            f"{diag['decided_by']} · {diag['latency_ms']:.0f} ms</span>", unsafe_allow_html=True)
+                st.write(diag["description"])
+                issues = (diag.get("analysis") or {}).get("issues", [])
+                for issue in issues:
+                    st.markdown(f"- **{issue['error_class']}** — {html.escape(issue['message'])}")
+                for note in diag.get("notes", []):
+                    st.info(note)
+
+                if rep:
+                    r = rep["repair"]
+                    st.subheader("Repair")
+                    if r["success"]:
+                        st.success("Verified fix — the repaired query passes every check.")
                     else:
-                        st.error(f"Classification request failed with status {res_predict.status_code}")
-                except Exception as e:
-                    st.error(f"API Communication Error: {e}")
+                        st.warning(f"No complete fix found (remaining: {r['remaining_error']}).")
+                    if r["repaired_query"]:
+                        st.markdown(sql_box(r["repaired_query"]), unsafe_allow_html=True)
+                    for i, s in enumerate(r["steps"], 1):
+                        st.markdown(f"{i}. `{s['error_class']}` {html.escape(s['description'])}")
+                    if not r["success"]:
+                        st.caption(r["explanation"])
+
+                model = diag.get("model")
+                if model:
+                    st.subheader("Model")
+                    probs = pd.DataFrame({"class": list(model["probabilities"]),
+                                          "probability": list(model["probabilities"].values())}).sort_values("probability")
+                    st.bar_chart(probs, x="class", y="probability", horizontal=True, height=240)
+                exp = diag.get("explanation")
+                if exp and "query_tokens" in exp:
+                    st.markdown(f"**Why {exp['target_class']}?** "
+                                "<span class='muted'>red pushes towards the prediction, blue against</span>",
+                                unsafe_allow_html=True)
+                    st.markdown(token_html(exp["query_tokens"]), unsafe_allow_html=True)
+                elif exp and "error" in exp:
+                    st.caption(exp["error"])
         else:
-            st.info("Enter a SQL statement and click 'Analyze & Repair Query' to run the classification model.")
+            st.caption("Enter a query and press *Diagnose and repair*. Pick the database in the sidebar.")
 
-# ----------------------------------------------------
-# TAB 2: Natural Language to SQL Generation & Pipeline Validation
-# ----------------------------------------------------
-with tab_nl2sql:
-    st.subheader("✍️ Text-to-SQL Translation & Automated Pipeline Validation")
-    st.write(
-        "Convert plain English questions into context-aware SQL queries using a local T5 model. "
-        "The generated query is automatically validated by our classifier and repaired if errors are found."
-    )
-    
-    nl_question = st.text_input(
-        "Type your question in plain English:",
-        placeholder="Show department names where average salary is greater than 60000"
-    )
-    
-    conf_thresh = st.slider(
-        "Confidence Threshold Warning Sensitivity:",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.5,
-        step=0.05
-    )
-    
-    generate_btn = st.button("🪄 Translate & Validate Query", type="primary")
-    
-    if generate_btn and nl_question.strip():
-        with st.spinner("Generating SQL query via T5, validating classifier, and checking auto-repair..."):
-            nl2sql_payload = {
-                "question": nl_question,
-                "database_schema": active_schema,
-                "confidence_threshold": conf_thresh
-            }
-            
-            try:
-                res_nl2sql = requests.post(f"{API_BASE_URL}/generate_sql", json=nl2sql_payload, timeout=25)
-                if res_nl2sql.status_code == 200:
-                    gen_data = res_nl2sql.json()
-                    
-                    generated_sql = gen_data["generated_sql"]
-                    confidence = gen_data["confidence"]
-                    validation = gen_data["validation"]
-                    repaired_sql = gen_data["repaired_sql"]
-                    explanation = gen_data["explanation"]
-                    warning = gen_data.get("warning")
-                    alternatives = gen_data.get("alternatives")
-                    latency = gen_data["inference_time_ms"]
-                    
-                    st.markdown(f"### 🚀 Generated SQL Query (Latency: {latency:.2f}ms)")
-                    st.code(generated_sql, language="sql")
-                    
-                    st.markdown(f"**Generation Confidence**: {confidence*100:.1f}%")
-                    st.progress(confidence)
-                    
-                    if warning:
-                        st.warning(warning)
-                        
-                    if alternatives:
-                        st.markdown("**Top Alternative Candidate Queries**:")
-                        for idx, alt in enumerate(alternatives):
-                            st.write(f"{idx+1}. `{alt}`")
-                            
-                    st.markdown("---")
-                    st.markdown("### 🛡️ Automated Validation & Repair Pipeline")
-                    
-                    val_class = validation["predicted_class"]
-                    val_conf = validation["confidence"]
-                    is_error = validation["is_error"]
-                    
-                    if not is_error:
-                        st.success(f"🟢 **Valid Query**: Classifier verified query status as **CORRECT** (Confidence: {val_conf*100:.1f}%).")
-                    else:
-                        st.error(f"🔴 **Error Detected**: Classifier predicted **{val_class}** (Confidence: {val_conf*100:.1f}%).")
-                        
-                        if repaired_sql:
-                            st.markdown("### 🔧 Auto-Repaired Query:")
-                            st.code(repaired_sql, language="sql")
-                            
-                            if explanation:
-                                st.write(f"**Diagnosis Explanation**: {explanation.get('explanation')}")
-                                st.write(f"**Suggested Action**: {explanation.get('suggested_correction')}")
-                        else:
-                            st.info("No auto-repair options could be resolved for this category.")
-                else:
-                    st.error(f"Text-to-SQL generation failed with status code {res_nl2sql.status_code}")
-            except Exception as e:
-                st.error(f"API Communication Error: {e}")
+# ---- NL -> SQL
+with tab_nl:
+    if "db_id" not in context and "database_schema" not in context:
+        st.info("Choose an example database or a custom schema in the sidebar first.")
+    question = st.text_input("Question", value="How many singers are older than 30?")
+    k = st.slider("Candidates", 1, 5, 3)
+    if st.button("Generate SQL", type="primary") and question.strip():
+        with st.spinner("Generating, verifying and repairing (the first request loads the model) ..."):
+            res = api("POST", "/nl2sql", timeout=CFG.get("nl2sql_timeout_s", 180),
+                      json={"question": question, "num_candidates": k, **context})
+        if res:
+            status = {"valid": "Top candidate is valid", "valid_alternative": "A lower-ranked candidate was valid",
+                      "repaired": "Generated SQL was invalid and has been repaired",
+                      "invalid": "No valid SQL could be produced"}.get(res["status"], res["status"])
+            (st.success if res["status"] != "invalid" else st.error)(status)
+            if res["sql"]:
+                st.markdown(sql_box(res["sql"]), unsafe_allow_html=True)
+            st.dataframe(pd.DataFrame([{"rank": c["rank"], "sql": c["sql"], "confidence": c["confidence"],
+                                        "verdict": c["error_class"], "issues": "; ".join(c["issues"])}
+                                       for c in res["candidates"]]), hide_index=True, width="stretch")
+            if res.get("repair"):
+                st.caption(res["repair"]["explanation"])
+            if res.get("prompt_truncated"):
+                st.warning("The schema was too long for the generator's input and was truncated.")
+            st.caption(f"Generator {res['generator']} · {res['latency_ms']:.0f} ms")
 
-# ----------------------------------------------------
-# TAB 3: Batch Processing (CSV Upload & Array Endpoint)
-# ----------------------------------------------------
+# ---- Batch
 with tab_batch:
-    st.subheader("📂 Batch Processing & Multi-Query Diagnostics")
-    
-    sub_csv, sub_array = st.tabs(["📄 CSV File Upload (/upload)", "📋 Multi-Query Array (/batch)"])
-    
-    with sub_csv:
-        st.write(
-            "Upload a CSV file containing multiple SQL query rows. "
-            "Must contain a `sql_query` or `query` column, and optional `database_schema` column."
-        )
-        
-        uploaded_file = st.file_uploader("Choose a CSV file:", type=["csv"], key="batch_csv_file")
-        
-        if uploaded_file is not None:
-            with st.spinner("Running batch classification and auto-repairs on uploaded CSV..."):
-                files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")}
-                try:
-                    res_upload = requests.post(f"{API_BASE_URL}/upload", files=files, timeout=60)
-                    if res_upload.status_code == 200:
-                        records = res_upload.json()
-                        
-                        parsed_records = []
-                        for r in records:
-                            q = r.get("query")
-                            pred = r.get("classification", {}).get("predicted_class", "unknown")
-                            conf = r.get("classification", {}).get("confidence", 0.0)
-                            suggest = r.get("repair", {}).get("suggested_correction", "None")
-                            fixed = r.get("repair", {}).get("corrected_query", "")
-                            
-                            parsed_records.append({
-                                "SQL Query": q,
-                                "Detected Error Category": pred,
-                                "Confidence": f"{conf*100:.1f}%",
-                                "Suggested Correction": suggest,
-                                "Repaired Query": fixed
-                            })
-                            
-                        res_df = pd.DataFrame(parsed_records)
-                        st.success(f"Successfully processed {len(res_df)} query rows!")
-                        st.dataframe(res_df, use_container_width=True)
-                        
-                        output_csv = res_df.to_csv(index=False)
-                        st.download_button(
-                            label="📥 Download Corrected Batch CSV",
-                            data=output_csv,
-                            file_name="sql_batch_repaired_results.csv",
-                            mime="text/csv"
-                        )
-                    else:
-                        st.error(f"Batch CSV upload failed with status code {res_upload.status_code}")
-                except Exception as e:
-                    st.error(f"Error processing CSV batch upload: {e}")
-                    
-    with sub_array:
-        st.write("Paste multiple SQL queries below (one per line) to process them sequentially via the `/batch` endpoint.")
-        
-        batch_text_input = st.text_area(
-            "SQL Statements List:",
-            value="SELECT name salary FROM employees\nSELECT * FROM non_existent_table\nSELECT name FROM employees WHERE salary > 50000",
-            height=150
-        )
-        
-        run_repair_check = st.checkbox("Run Auto-Repair for Detected Errors", value=True)
-        run_batch_btn = st.button("🚀 Process Batch Statements", type="primary")
-        
-        if run_batch_btn and batch_text_input.strip():
-            queries_list = [line.strip() for line in batch_text_input.strip().split("\n") if line.strip()]
-            
-            batch_payload = {
-                "queries": queries_list,
-                "database_schemas": [active_schema] * len(queries_list),
-                "run_repair": run_repair_check
-            }
-            
-            with st.spinner(f"Batch processing {len(queries_list)} SQL statements..."):
-                try:
-                    res_batch = requests.post(f"{API_BASE_URL}/batch", json=batch_payload, timeout=30)
-                    if res_batch.status_code == 200:
-                        batch_res_data = res_batch.json()
-                        results_array = batch_res_data.get("results", [])
-                        
-                        table_rows = []
-                        for item in results_array:
-                            q_text = item.get("query")
-                            c_info = item.get("classification", {})
-                            p_class = c_info.get("predicted_class", "N/A")
-                            p_conf = c_info.get("confidence", 0.0)
-                            
-                            r_info = item.get("repair", {})
-                            c_query = r_info.get("corrected_query", "N/A") if r_info else "N/A"
-                            s_action = r_info.get("suggested_correction", "N/A") if r_info else "N/A"
-                            
-                            table_rows.append({
-                                "Query": q_text,
-                                "Predicted Class": p_class,
-                                "Confidence": f"{p_conf*100:.1f}%",
-                                "Repaired Query": c_query,
-                                "Suggested Action": s_action
-                            })
-                            
-                        st.success(f"Processed {len(table_rows)} queries via `/batch` endpoint.")
-                        st.dataframe(pd.DataFrame(table_rows), use_container_width=True)
-                    else:
-                        st.error(f"Batch API returned status code {res_batch.status_code}")
-                except Exception as e:
-                    st.error(f"Batch Processing Error: {e}")
+    st.write("Diagnose many queries against the schema selected in the sidebar, or upload a CSV with a "
+             "`query` column (and optionally `db_id`).")
+    mode = st.radio("Input", ["Paste queries", "Upload CSV"], horizontal=True)
+    do_repair = st.checkbox("Repair erroneous queries", value=True)
+    results = None
+    if mode == "Paste queries":
+        text = st.text_area("One query per line", height=160,
+                            value="SELECT Name FROM singer\nSELECT Nmae FROM singer\nSELECT count(*) FROM singers")
+        if st.button("Run batch", type="primary"):
+            queries = [q for q in text.splitlines() if q.strip()]
+            results = api("POST", "/batch", json={"queries": queries, "repair": do_repair, **context}) if queries else None
+    else:
+        up = st.file_uploader("CSV file", type=["csv"])
+        if up is not None and st.button("Process file", type="primary"):
+            params = {"repair": str(do_repair).lower()}
+            if "db_id" in context:
+                params["db_id"] = context["db_id"]
+            results = api("POST", "/upload", params=params, files={"file": (up.name, up.getvalue(), "text/csv")},
+                          timeout=600)
+    if results:
+        df = pd.DataFrame(results)
+        a, b, c = st.columns(3)
+        a.metric("Queries", len(df))
+        b.metric("With errors", int(df["is_error"].sum()))
+        if "repair_success" in df:
+            c.metric("Repaired", int(df["repair_success"].fillna(False).sum()))
+        st.bar_chart(df["error_class"].value_counts())
+        st.dataframe(df, width="stretch", hide_index=True)
+        st.download_button("Download results (CSV)", df.to_csv(index=False), "sqldiagnose_results.csv", "text/csv")
 
-# ----------------------------------------------------
-# TAB 4: Database Schema Extraction & Parsing Service
-# ----------------------------------------------------
+# ---- Schema
 with tab_schema:
-    st.subheader("🗄️ Database Schema Extraction Service")
-    st.write(
-        "Directly extract tables, columns, primary keys, and foreign keys from live **SQLite**, "
-        "**PostgreSQL**, or **MySQL** databases, and convert them to internal JSON catalogs or SQL DDL."
-    )
-    
-    db_type = st.radio("Select Target Database Type:", ["SQLite (.db File)", "PostgreSQL Connection", "MySQL Connection"], horizontal=True)
-    
-    if db_type == "SQLite (.db File)":
-        sqlite_file = st.file_uploader("Upload SQLite database file (.db / .sqlite):", type=["db", "sqlite", "sqlite3"])
-        
-        if sqlite_file is not None:
-            if st.button("⚡ Extract SQLite Schema", type="primary"):
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
-                    tmp.write(sqlite_file.getvalue())
-                    tmp_path = tmp.name
-                    
-                try:
-                    parsed_schema = DatabaseSchemaParser.parse_sqlite(tmp_path)
-                    st.session_state["parsed_live_schema"] = parsed_schema
-                    
-                    st.success(f"Successfully extracted schema! Found {len(parsed_schema)} table(s).")
-                    
-                    col_json, col_ddl = st.columns([1, 1])
-                    with col_json:
-                        st.markdown("### 📋 Internal Schema Catalog (JSON)")
-                        st.json(parsed_schema)
-                        
-                    with col_ddl:
-                        st.markdown("### 📜 Standard DDL Format")
-                        ddl_text = DatabaseSchemaParser.to_ddl(parsed_schema)
-                        st.code(ddl_text, language="sql")
-                        
-                    st.info("Tip: 'Live Parsed DB Schema' is now active in the sidebar for classification & NL2SQL generation!")
-                except Exception as e:
-                    st.error(f"Failed to parse SQLite schema: {e}")
-                    
-    elif db_type == "PostgreSQL Connection":
-        pg_conn_str = st.text_input("PostgreSQL Connection String:", value="dbname=test user=postgres password=secret host=localhost port=5432")
-        if st.button("⚡ Connect & Extract PostgreSQL Schema", type="primary"):
-            try:
-                parsed_schema = DatabaseSchemaParser.parse_postgresql(pg_conn_str)
-                st.session_state["parsed_live_schema"] = parsed_schema
-                st.success(f"Successfully extracted PostgreSQL schema! Found {len(parsed_schema)} table(s).")
-                st.json(parsed_schema)
-            except Exception as e:
-                st.error(f"PostgreSQL connection failed: {e}")
-                
-    elif db_type == "MySQL Connection":
-        my_conn_str = st.text_input("MySQL Connection String:", value="host=localhost user=root password=secret database=test")
-        if st.button("⚡ Connect & Extract MySQL Schema", type="primary"):
-            try:
-                parsed_schema = DatabaseSchemaParser.parse_mysql(my_conn_str)
-                st.session_state["parsed_live_schema"] = parsed_schema
-                st.success(f"Successfully extracted MySQL schema! Found {len(parsed_schema)} table(s).")
-                st.json(parsed_schema)
-            except Exception as e:
-                st.error(f"MySQL connection failed: {e}")
-
-# ----------------------------------------------------
-# TAB 5: Operational Telemetry & Health Dashboard
-# ----------------------------------------------------
-with tab_metrics:
-    st.subheader("📊 API Operational Telemetry & System Health")
-    
-    if st.button("🔄 Refresh Telemetry Metrics"):
-        st.rerun()
-        
-    try:
-        res_health = requests.get(f"{API_BASE_URL}/health", timeout=3)
-        res_metrics = requests.get(f"{API_BASE_URL}/metrics", timeout=3)
-        
-        if res_health.status_code == 200 and res_metrics.status_code == 200:
-            h_data = res_health.json()
-            m_data = res_metrics.json()
-            
-            # Key Metrics Cards
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("API Status", h_data.get("status", "N/A").upper())
-            with col2:
-                st.metric("Total Predictions", m_data.get("total_predictions", 0))
-            with col3:
-                st.metric("Total Auto-Repairs", m_data.get("total_repairs", 0))
-            with col4:
-                st.metric("Avg Latency", f"{m_data.get('avg_inference_time_ms', 0.0):.2f} ms")
-                
-            st.markdown("---")
-            
-            col_chart, col_details = st.columns([1, 1])
-            
-            with col_chart:
-                st.markdown("### 📈 Error Category Counts Breakdown")
-                counts = m_data.get("error_class_counts", {})
-                if counts:
-                    counts_df = pd.DataFrame(list(counts.items()), columns=["Category", "Count"])
-                    st.bar_chart(counts_df.set_index("Category"))
-                else:
-                    st.info("No prediction telemetry logged yet.")
-                    
-            with col_details:
-                st.markdown("### 🖥️ Hardware & Execution Environment")
-                st.write(f"- **Hardware Execution Target**: `{h_data.get('device', 'N/A').upper()}`")
-                st.write(f"- **ML Transformer Model Loaded**: `{h_data.get('model_loaded', False)}`")
-                st.write(f"- **Backend Target Domain**: `{API_BASE_URL}`")
-                st.write(f"- **Active Config Classes Count**: `8 Categories`")
+    st.write("Import a schema; it becomes the *Custom schema* in the sidebar.")
+    how = st.radio("Source", ["CREATE TABLE statements", "SQLite file", "Live PostgreSQL / MySQL"], horizontal=True)
+    parsed = None
+    if how == "CREATE TABLE statements":
+        dialect = st.selectbox("Dialect", ["sqlite", "postgres", "mysql", "tsql", "oracle", "snowflake", "bigquery"])
+        ddl = st.text_area("DDL", height=200, value="CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(80), age INT);\n"
+                                                    "CREATE TABLE orders (id INT PRIMARY KEY, user_id INT REFERENCES users(id), total DECIMAL(10,2));")
+        if st.button("Parse DDL", type="primary"):
+            parsed = api("POST", "/schemas/parse-ddl", json={"ddl": ddl, "dialect": dialect})
+    elif how == "SQLite file":
+        up = st.file_uploader("SQLite database", type=["sqlite", "db", "sqlite3"])
+        if up is not None and st.button("Read schema", type="primary"):
+            parsed = api("POST", "/schemas/parse-sqlite", files={"file": (up.name, up.getvalue(), "application/octet-stream")})
+    else:
+        engine = st.selectbox("Engine", ["postgresql", "mysql"])
+        if engine == "postgresql":
+            dsn = st.text_input("libpq connection string", value="dbname=mydb user=postgres host=localhost port=5432")
+            conn = {"dsn": dsn}
         else:
-            st.error("Failed to retrieve telemetry metrics from API backend.")
-    except Exception as e:
-        st.error(f"Error fetching API telemetry logs: {e}")
+            c1, c2 = st.columns(2)
+            conn = {"host": c1.text_input("Host", "localhost"), "port": int(c2.number_input("Port", value=3306)),
+                    "user": c1.text_input("User", "root"), "password": c2.text_input("Password", type="password"),
+                    "database": c1.text_input("Database", "mydb")}
+        st.caption("Credentials are sent to the API only for this request and are not stored.")
+        if st.button("Connect and read schema", type="primary"):
+            parsed = api("POST", "/schemas/parse-live", json={"engine": engine, "connection": conn})
+    if parsed:
+        ss.custom_schema = parsed["database_schema"]
+        st.success(f"Parsed {len(ss.custom_schema)} tables. Select *Custom schema* in the sidebar to use it.")
+        st.json(ss.custom_schema, expanded=False)
+
+# ---- Service
+with tab_stats:
+    m = api("GET", "/metrics") if health else None
+    if m:
+        a, b, c, d = st.columns(4)
+        a.metric("Diagnoses", m["diagnoses"])
+        b.metric("Mean latency", f"{m['mean_diagnosis_latency_ms']:.0f} ms")
+        c.metric("Repairs", m["repairs"])
+        d.metric("Successful repairs", m["repairs_successful"])
+        counts = pd.Series(m["class_counts"])
+        if counts.sum():
+            st.bar_chart(counts[counts > 0])
+        st.caption(f"Uptime {m['uptime_s'] / 60:.1f} min · requests {m['requests']}")
+    if health and health.get("model"):
+        st.subheader("Loaded classifier")
+        st.json(health["model"], expanded=False)
+    labels = api("GET", "/labels") if health else None
+    if labels:
+        st.subheader("Error classes")
+        st.dataframe(pd.DataFrame(labels), hide_index=True, width="stretch")

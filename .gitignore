@@ -1,20 +1,21 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
+.pytest_cache/
+.venv/
 
-# Checkpoints and models (too large for GitHub)
-experiments/
-checkpoints/
-logs/
-reports/uvicorn_test.log
+# Raw benchmark data (download with: python -m data_pipeline.build_dataset --download)
+data/raw/
 
-# Binary model files
+# Model checkpoints (train with: python -m training.train, or download a release)
+models/checkpoints/
 *.pt
 *.bin
 *.safetensors
 *.onnx
 
-# OS files
+# Logs / OS files
+logs/
+*.log
 .DS_Store
 Thumbs.db

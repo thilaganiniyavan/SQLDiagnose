@@ -1,49 +1,40 @@
-# Dockerfile
-# Clean Architecture: Frameworks & Drivers
-# Standard Docker image utilizing multi-stage builds to limit runtime dependencies.
+# Dockerfile - SQLDiagnose API and UI (CPU image).
+#
+#   docker build -f deployment/Dockerfile -t sqldiagnose .
+#   docker run -p 8000:8000 sqldiagnose                       # API
+#   docker run -p 8501:8501 -e SQLDIAGNOSE_API_URL=http://host.docker.internal:8000/api/v1 \
+#       sqldiagnose python -m streamlit run frontend/app.py --server.address 0.0.0.0   # UI
+#
+# The fine-tuned classifier is copied from models/checkpoints/ if present; without it the API
+# runs with the deterministic analyzer only (GET /api/v1/health reports model_loaded=false).
 
-# Base Stage
-FROM python:3.10-slim AS base
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HF_HOME=/app/.cache/huggingface
 
 WORKDIR /app
-
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=off \
-    PIP_DISABLE_PIP_VERSION_CHECK=on
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Dependency Stage
-FROM base AS builder
 
 COPY requirements.txt .
-RUN pip install --user -r requirements.txt
+RUN pip install --index-url https://download.pytorch.org/whl/cpu torch \
+ && pip install -r requirements.txt
 
-# Final Runtime Stage
-FROM python:3.10-slim AS runner
+COPY analysis ./analysis
+COPY configs ./configs
+COPY data_pipeline ./data_pipeline
+COPY deployment ./deployment
+COPY evaluation ./evaluation
+COPY frontend ./frontend
+COPY models ./models
+COPY repair ./repair
+COPY services ./services
+COPY training ./training
+COPY utils ./utils
+COPY data/processed/schemas.json ./data/processed/schemas.json
+COPY .streamlit ./.streamlit
 
-WORKDIR /app
+RUN useradd --create-home app && chown -R app /app
+USER app
 
-# Copy installed site-packages from builder
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
-
-# Copy project code
-COPY ./configs /app/configs
-COPY ./datasets /app/datasets
-COPY ./models /app/models
-COPY ./deployment /app/deployment
-COPY ./utils /app/utils
-COPY ./repair /app/repair
-COPY ./evaluation /app/evaluation
-
-# Copy fine-tuned CodeBERT model checkpoints
-COPY ./experiments/exp_claudios_codebert-base_42/checkpoints /app/experiments/exp_claudios_codebert-base_42/checkpoints
-
-EXPOSE 8000
-
+EXPOSE 8000 8501
 CMD ["python", "-m", "uvicorn", "deployment.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

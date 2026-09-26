@@ -1,0 +1,75 @@
+{
+ "n": 150,
+ "raw_validity": 0.3466666666666667,
+ "selected_validity": 0.43333333333333335,
+ "final_validity": 0.6666666666666666,
+ "raw_execution_accuracy": 0.16,
+ "selected_execution_accuracy": 0.2,
+ "final_execution_accuracy": 0.22,
+ "mean_generation_ms": 4100.066666666666,
+ "status_counts": {
+  "invalid": 50,
+  "repaired": 35,
+  "valid": 52,
+  "valid_alternative": 13
+ },
+ "invalid_raw_examples": [
+  {
+   "question": "What is the name of the visitor who visited both a museum opened before 2009 and a museum opened after 2011?",
+   "raw": "SELECT T2.Name, T2.Name FROM museum AS T1 JOIN visitor AS T2 ON T1.Museum_ID = T2.Museum_ID WHERE T1.Open_Year  2009 INTERSECT SELECT T2.Name FROM museum AS T1 JOIN visit AS T2 ON T1.Museum_ID = T2.Museum_ID WHERE T1.Open_Year > 2011",
+   "raw_error": "SYNTAX_ERROR",
+   "final": "SELECT T2.Name, T2.Name FROM museum AS T1 JOIN visitor AS T2 ON T1.Museum_ID = T2.Museum_ID WHERE T1.Open_Year  2009 INTERSECT SELECT T2.Name FROM museum AS T1 JOIN visit AS T2 ON T1.Museum_ID = T2.Museum_ID WHERE T1.Open_Year > 2011",
+   "status": "invalid"
+  },
+  {
+   "question": "What is the TV Channel that shows the cartoon \"The Rise of the Blue Beetle!\"? List the TV Channel's series name.",
+   "raw": "SELECT T1.series_name FROM TV_Channel AS T1 JOIN Cartoon AS T2 ON T1.Channel = T2.Channel WHERE T2.Title = \"The Rise of the Blue Beetle!\"",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT T1.series_name FROM TV_Channel AS T1 JOIN Cartoon AS T2 ON T1.id = T2.Channel WHERE T2.Title = \"The Rise of the Blue Beetle!\"",
+   "status": "repaired"
+  },
+  {
+   "question": "How many car models are produced by each maker ? Only list the count and the maker full name .",
+   "raw": "SELECT COUNT(*), T1.FullName FROM car_makers AS T1 JOIN countries AS T2 ON T1.CountryId = T2.CountryId GROUP BY T1.FullName",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT COUNT(*), T1.FullName FROM car_makers AS T1 JOIN countries AS T2 ON T1.Country = T2.CountryId GROUP BY T1.FullName",
+   "status": "repaired"
+  },
+  {
+   "question": "Which employee received the most awards in evaluations? Give me the employee name.",
+   "raw": "SELECT Employee_name, Employee_ID FROM evaluation GROUP BY Employee_ID ORDER BY COUNT(*) DESC LIMIT 1",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT Employee_ID, Employee_ID FROM evaluation GROUP BY Employee_ID ORDER BY COUNT(*) DESC LIMIT 1",
+   "status": "repaired"
+  },
+  {
+   "question": "What are the names of players who won in both 2013 and 2016?",
+   "raw": "SELECT first_name, last_name, last_name FROM players WHERE year = 2013 INTERSECT SELECT player_name FROM players WHERE year = 2016",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT first_name, last_name, last_name FROM players WHERE year = 2013 INTERSECT SELECT player_name FROM players WHERE year = 2016",
+   "status": "invalid"
+  },
+  {
+   "question": "What is the last transcript release date?",
+   "raw": "SELECT department_name, department_id FROM Courses GROUP BY department_name ORDER BY department_name",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT department_name, department_id FROM Courses GROUP BY department_name ORDER BY department_name",
+   "status": "invalid"
+  },
+  {
+   "question": "What are the countries that have cartoons on TV that were written by Todd Casey?",
+   "raw": "SELECT Country, COUNT(Country) FROM TV_Channel AS T1 JOIN Cartoon AS T2 ON T1.Channel = T2.Channel WHERE T2.Writed_by = 'Todd Casey'",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT Country, COUNT(Country) FROM TV_Channel AS T1 JOIN Cartoon AS T2 ON T1.id = T2.Channel WHERE T2.Written_by = 'Todd Casey' GROUP BY Country",
+   "status": "repaired"
+  },
+  {
+   "question": "What is the official language spoken in the country whose head of state is Beatrix?",
+   "raw": "SELECT T1.Language, T1.Language FROM country AS T1 JOIN countrylanguage AS T2 ON T1.CountryCode = T2.CountryCode WHERE T2.HeadOfState = \"Brittrix\"",
+   "raw_error": "UNKNOWN_COLUMN",
+   "final": "SELECT T2.Language, T2.Language FROM country AS T1 JOIN countrylanguage AS T2 ON T1.Code = T2.CountryCode WHERE T1.HeadOfState = \"Brittrix\"",
+   "status": "repaired"
+  }
+ ],
+ "generator": "cssupport/t5-small-awesome-text-to-sql"
+}
