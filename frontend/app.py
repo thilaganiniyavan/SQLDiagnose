@@ -36,14 +36,348 @@ CLASS_COLORS = {
     "SEMANTIC_ERROR": "#3b82f6",
 }
 
-st.set_page_config(page_title=CFG.get("title", "SQLDiagnose"), page_icon="🩺", layout="wide")
+st.set_page_config(page_title=CFG.get("title", "SQLDiagnose"), page_icon="🩺", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""
 <style>
-.badge {display:inline-block;padding:4px 12px;border-radius:999px;font-weight:600;color:white;font-size:0.95rem}
-.sqlbox {font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background:#0b1220; border:1px solid #334155;
-         border-radius:8px; padding:10px 12px; white-space:pre-wrap; word-break:break-word; font-size:0.9rem}
-.tok {display:inline-block;margin:2px;padding:2px 5px;border-radius:4px;font-family:ui-monospace,monospace;font-size:0.85rem}
-.muted {color:#94a3b8;font-size:0.9rem}
+:root {
+  --primary: #0f172a;
+  --primary-light: #1e293b;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --success: #10b981;
+  --error: #ef4444;
+  --warning: #f59e0b;
+  --border: #334155;
+  --bg-dark: #0f172a;
+  --bg-darker: #020617;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: var(--text-primary);
+}
+
+/* Main container styling */
+.main {
+  background: var(--bg-dark);
+  color: var(--text-primary);
+}
+
+/* Header styling */
+header {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 20px 0;
+}
+
+/* Card styling */
+.metric-card {
+  background: linear-gradient(135deg, #1e293b 0%, #164e63 100%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 10px 0;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 16px rgba(59, 130, 246, 0.2);
+  border-color: var(--accent);
+}
+
+/* Badge styling */
+.badge {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  color: white;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.badge.correct {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.badge.error {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.badge.warning {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+/* SQL Box styling */
+.sqlbox {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', ui-monospace, SFMono-Regular, monospace;
+  background: linear-gradient(135deg, #020617 0%, #0f172a 100%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #e2e8f0;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.sqlbox:hover {
+  border-color: var(--accent);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+/* Token styling */
+.tok {
+  display: inline-block;
+  margin: 2px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', ui-monospace, monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.tok:hover {
+  transform: scale(1.05);
+}
+
+/* Text styling */
+.muted {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  letter-spacing: 0.3px;
+}
+
+/* Info boxes */
+.info-box {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+  border-left: 4px solid var(--accent);
+  border-right: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+  backdrop-filter: blur(10px);
+}
+
+.tip-box {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+  border-left: 4px solid var(--success);
+  border-right: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+  backdrop-filter: blur(10px);
+}
+
+/* Tabs styling */
+[data-testid="stTabs"] {
+  background: transparent;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+[data-testid="stTabs"] [data-testid="stTabBar"] {
+  background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%);
+  border-bottom: 2px solid var(--border);
+}
+
+[data-testid="stTabs"] button[aria-selected="true"] {
+  color: var(--accent) !important;
+  border-bottom: 3px solid var(--accent) !important;
+}
+
+/* Button styling */
+.stButton > button {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  font-weight: 600 !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+  font-size: 0.95rem !important;
+  letter-spacing: 0.3px !important;
+}
+
+.stButton > button:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4) !important;
+}
+
+.stButton > button:active {
+  transform: translateY(0) !important;
+}
+
+/* Input styling */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea,
+.stSelectbox > div > div > select,
+.stNumberInput > div > div > input {
+  background: var(--primary-light) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  color: var(--text-primary) !important;
+  padding: 12px !important;
+  transition: all 0.3s ease !important;
+  font-size: 0.95rem !important;
+}
+
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus,
+.stSelectbox > div > div > select:focus,
+.stNumberInput > div > div > input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  background: rgba(30, 41, 59, 0.8) !important;
+}
+
+/* Sidebar styling */
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-right: 1px solid var(--border);
+}
+
+[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+  padding-top: 20px;
+}
+
+/* Expander styling */
+[data-testid="stExpander"] {
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  background: rgba(30, 41, 59, 0.5) !important;
+  margin: 8px 0 !important;
+}
+
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+  padding: 16px !important;
+}
+
+/* Divider styling */
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 24px 0;
+}
+
+/* Markdown headings */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.5px !important;
+}
+
+h1 {
+  background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 24px !important;
+  font-size: 2.5rem !important;
+}
+
+h2 {
+  margin-top: 24px !important;
+  margin-bottom: 16px !important;
+  font-size: 1.5rem !important;
+}
+
+h3 {
+  margin-top: 20px !important;
+  margin-bottom: 12px !important;
+  font-size: 1.2rem !important;
+  color: #e0f2fe !important;
+}
+
+/* Success/Error/Warning messages */
+[data-testid="stAlert"] {
+  border-radius: 8px !important;
+  border-left: 4px solid !important;
+  padding: 16px !important;
+  margin: 12px 0 !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+/* Metric styling */
+[data-testid="metric-container"] {
+  background: linear-gradient(135deg, #1e293b 0%, #164e63 100%) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  padding: 20px !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Dataframe styling */
+[data-testid="stDataFrame"] {
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+/* Loading spinner */
+.stSpinner {
+  color: var(--accent) !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--primary-light);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-hover);
+}
+
+/* Animation for page load */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-testid="stContainer"] {
+  animation: slideIn 0.4s ease-out;
+}
+
+/* Professional color scheme for different states */
+.status-correct { color: var(--success); }
+.status-error { color: var(--error); }
+.status-warning { color: var(--warning); }
+.status-info { color: var(--accent); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -91,7 +425,8 @@ def get_example_schema(db_id: str) -> Optional[Dict]:
 
 
 def badge(cls: str) -> str:
-    return f'<span class="badge" style="background:{CLASS_COLORS.get(cls, "#64748b")}">{html.escape(cls)}</span>'
+    badge_class = "correct" if cls == "CORRECT" else ("error" if "ERROR" in cls or cls in ["SYNTAX_ERROR", "UNKNOWN_TABLE", "UNKNOWN_COLUMN", "DATATYPE_MISMATCH", "AMBIGUOUS_REFERENCE", "PERMISSION_DENIED", "SEMANTIC_ERROR"] else "warning")
+    return f'<span class="badge {badge_class}">{html.escape(cls)}</span>'
 
 
 def sql_box(sql: str) -> str:
@@ -173,63 +508,70 @@ if "link_applied" not in ss:
 # ---------------------------------------------------------------------- sidebar: status + schema context
 health = get_health()
 with st.sidebar:
-    st.header("SQLDiagnose")
-    if health:
-        st.success("API online")
-        if health["model_loaded"]:
-            m = health["model"]
-            f1 = (m.get("validation") or {}).get("macro_f1")
-            st.caption(f"Classifier: `{m.get('backbone')}`" + (f" · val macro-F1 {f1:.3f}" if f1 else ""))
-        else:
-            st.warning("No classifier checkpoint loaded — diagnoses use the deterministic analyzer only.")
-        st.caption(f"Generator: `{health.get('generator') or 'disabled'}`"
-                   + (" (loaded)" if health.get("generator_loaded") else " (loads on first use)"))
-    else:
-        st.error(f"API offline ({API})")
+    st.header("⚙️ Settings")
 
-    st.subheader("Database schema")
+    with st.expander("🔧 System Status", expanded=True):
+        if health:
+            st.success("✅ API is ready")
+            if health["model_loaded"]:
+                m = health["model"]
+                f1 = (m.get("validation") or {}).get("macro_f1")
+                st.caption(f"**Classifier**: {m.get('backbone')}" + (f" • **Accuracy**: {f1:.1%}" if f1 else ""))
+            else:
+                st.info("📌 Rule-based analyzer active (no AI model)")
+            st.caption(f"**Generator**: {health.get('generator') or 'Disabled'}" +
+                       (" ✓" if health.get("generator_loaded") else " (loads on first use)"))
+        else:
+            st.error(f"❌ API offline at {API}")
+
+    st.markdown("---")
+    st.markdown("### 📂 Pick Your Database")
     dbs = get_example_dbs()
-    sources = ["Example database", "Custom schema", "No schema"]
+    sources = ["📊 Use an example", "✏️ Custom schema", "❌ No schema"]
     ss.setdefault("schema_source", sources[0] if dbs else sources[2])
-    source = st.radio("Schema source", sources, label_visibility="collapsed", key="schema_source")
+    source = st.radio("Schema source:", sources, label_visibility="collapsed", key="schema_source")
     context: Dict[str, Any] = {}
     active_tables: Dict[str, Any] = {}
-    if source == "Example database" and dbs:
+    if source == "📊 Use an example" and dbs:
         default = CFG.get("default_database")
         ss.setdefault("db_select", default if default in dbs else dbs[0])
-        db_id = st.selectbox("Database", dbs, key="db_select")
+        db_id = st.selectbox("Which example database?", dbs, key="db_select",
+                            help=f"We have {len(dbs)} real databases from academic research")
         context["db_id"] = db_id
         info = get_example_schema(db_id)
         active_tables = info["database_schema"] if info else {}
-    elif source == "Custom schema":
-        if ss.custom_schema:
-            st.caption("Using the schema from the *Schema* tab. Edit it below if needed.")
-        text = st.text_area("Schema JSON", value=json.dumps(ss.custom_schema or {
+    elif source == "✏️ Custom schema":
+        st.caption("📝 Paste your database structure as JSON (or use the *Schema* tab to import from DDL/files)")
+        text = st.text_area("Your schema (JSON):", value=json.dumps(ss.custom_schema or {
             "users": {"columns": {"id": "INTEGER", "name": "TEXT", "age": "INTEGER"}, "primary_keys": ["id"]},
             "orders": {"columns": {"id": "INTEGER", "user_id": "INTEGER", "total": "REAL"}, "primary_keys": ["id"],
                        "foreign_keys": [{"column": "user_id", "target_table": "users", "target_column": "id"}]}},
-            indent=1), height=220)
+            indent=1), height=200, label_visibility="collapsed")
         try:
             active_tables = json.loads(text)
             context["database_schema"] = active_tables
         except json.JSONDecodeError as e:
-            st.error(f"Invalid JSON: {e}")
+            st.error(f"❌ Invalid JSON: {e}")
     else:
-        st.caption("Without a schema only grammar and schema-independent checks are verified.")
+        st.info("💡 Without a schema, we can only check grammar and basic SQL rules.")
 
     if active_tables:
-        with st.expander(f"Tables ({len(active_tables)})"):
+        with st.expander(f"📋 Your tables ({len(active_tables)})", expanded=True):
             for t, info in active_tables.items():
                 cols = info.get("columns", {})
                 cols_txt = ", ".join(f"{c} {ty}" for c, ty in cols.items()) if isinstance(cols, dict) else ", ".join(map(str, cols))
-                st.markdown(f"**{t}**: {cols_txt}")
+                st.caption(f"**{t}**: {cols_txt}")
+
+        st.markdown("**🔒 Access control** (optional)")
         if any(t not in active_tables for t in ss.get("restricted", [])):
             ss.restricted = []
-        restricted = st.multiselect("Restricted tables (access policy)", list(active_tables), key="restricted")
+        restricted = st.multiselect("Mark these tables as restricted:", list(active_tables), key="restricted",
+                                    help="Queries accessing these tables will be flagged as PERMISSION_DENIED")
         if restricted:
             context["access_policy"] = {"restricted_tables": restricted, "restricted_columns": []}
 
-    st.subheader("History")
+    st.markdown("---")
+    st.markdown("### 📜 Recent Queries")
     history_box = st.container()          # filled at the end of the script, after this run is recorded
 
 
@@ -244,231 +586,439 @@ def remember(query: str, cls: str):
 
 
 # ---------------------------------------------------------------------- tabs
-st.title("SQL diagnosis, repair and NL→SQL")
-st.caption("Classifies a query into one of eight error classes, explains why, and returns a repair that has been "
-           "verified against the schema. A deterministic analyzer provides verified verdicts; a fine-tuned code "
-           "transformer adds a learned opinion with token-level explanations.")
+st.markdown("""
+<div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f4c75 100%);
+            border-radius: 16px; padding: 40px; margin-bottom: 30px;
+            border: 1px solid #334155; box-shadow: 0 20px 40px rgba(59, 130, 246, 0.1);">
+    <h1 style="margin: 0 0 16px 0; font-size: 2.5rem;
+               background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+               -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+               background-clip: text;">
+        🩺 SQLDiagnose
+    </h1>
+    <p style="color: #cbd5e1; font-size: 1.1rem; margin: 0; line-height: 1.6;">
+        <strong>Enterprise-grade SQL error detection, repair, and generation.</strong>
+        Check your queries, get instant fixes, and transform questions into SQL.
+    </p>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 16px; margin-top: 24px;">
+        <div style="background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6;
+                    padding: 12px 16px; border-radius: 8px;">
+            <p style="color: #3b82f6; font-weight: 600; margin: 0; font-size: 0.9rem;">✓ Query Diagnosis</p>
+            <p style="color: #cbd5e1; font-size: 0.85rem; margin: 4px 0 0 0;">8 error classes detected</p>
+        </div>
+        <div style="background: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981;
+                    padding: 12px 16px; border-radius: 8px;">
+            <p style="color: #10b981; font-weight: 600; margin: 0; font-size: 0.9rem;">✓ Auto Repair</p>
+            <p style="color: #cbd5e1; font-size: 0.85rem; margin: 4px 0 0 0;">Verified fixes</p>
+        </div>
+        <div style="background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6;
+                    padding: 12px 16px; border-radius: 8px;">
+            <p style="color: #3b82f6; font-weight: 600; margin: 0; font-size: 0.9rem;">✓ NL→SQL</p>
+            <p style="color: #cbd5e1; font-size: 0.85rem; margin: 4px 0 0 0;">English to SQL</p>
+        </div>
+        <div style="background: rgba(248, 113, 113, 0.1); border-left: 4px solid #ef4444;
+                    padding: 12px 16px; border-radius: 8px;">
+            <p style="color: #ef4444; font-weight: 600; margin: 0; font-size: 0.9rem;">✓ Batch Testing</p>
+            <p style="color: #cbd5e1; font-size: 0.85rem; margin: 4px 0 0 0;">Process 1000s fast</p>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 tab_diag, tab_nl, tab_batch, tab_schema, tab_results, tab_stats = st.tabs(
     ["Diagnose & repair", "Question → SQL", "Batch", "Schema", "Results", "Service"])
 
 # ---- Diagnose & repair
 with tab_diag:
-    left, right = st.columns([1, 1], gap="large")
-    with left:
-        st.selectbox("Load an example", ["—"] + list(EXAMPLES), key="example", on_change=load_example)
-        query = st.text_area("SQL query", key="query", height=180)
-        c1, c2 = st.columns(2)
-        explain = c1.toggle("Token attributions", value=True, disabled=not (health and health.get("model_loaded")))
-        method = c2.selectbox("Method", ["gxi", "ig"], format_func=lambda m: {"gxi": "Gradient × input (fast)",
-                                                                               "ig": "Integrated gradients"}[m],
-                              disabled=not explain)
-        run = st.button("Diagnose and repair", type="primary", width="stretch") or ss.pop("auto_run", False)
-    with right:
-        if run and query.strip():
-            with st.spinner("Analyzing ..."):
-                diag = api("POST", "/diagnose", json={"query": query, "explain": explain, "explain_method": method, **context})
-                rep = api("POST", "/repair", json={"query": query, **context}) if diag and diag["is_error"] else None
-            if diag:
-                remember(query, diag["error_class"])
-                st.markdown(f"{badge(diag['error_class'])} &nbsp; <span class='muted'>decided by "
-                            f"{diag['decided_by']} · {diag['latency_ms']:.0f} ms</span>", unsafe_allow_html=True)
-                st.write(diag["description"])
+    st.markdown("### Query Analysis")
+
+    col_query, col_opts = st.columns([3, 1])
+
+    with col_query:
+        st.markdown("**📋 Load an example or paste your SQL:**")
+        st.selectbox("Pick an example:", ["—"] + list(EXAMPLES), key="example", on_change=load_example,
+                     help="Quick start with real error examples", label_visibility="collapsed")
+
+        query = st.text_area("Your SQL query:", key="query", height=140,
+                            placeholder="e.g., SELECT name FORM users WHERE age > 30\n(Try an example first!)",
+                            label_visibility="collapsed")
+
+    with col_opts:
+        st.markdown("### ⚙️ Options")
+        explain = st.checkbox("Show explanations", value=True, disabled=not (health and health.get("model_loaded")),
+                             help="AI token explanations")
+
+        if explain and health and health.get("model_loaded"):
+            method = st.selectbox("Method", ["gxi", "ig"], format_func=lambda m: {"gxi": "Fast", "ig": "Detailed"}[m],
+                                 label_visibility="collapsed")
+        else:
+            method = "gxi"
+
+    run = st.button("🔍 Analyze Query", type="primary", use_container_width=True) or ss.pop("auto_run", False)
+
+    st.divider()
+    st.markdown("### 📊 Results")
+    if run and query.strip():
+        with st.spinner("🔍 Checking your query..."):
+            diag = api("POST", "/diagnose", json={"query": query, "explain": explain, "explain_method": method, **context})
+            rep = api("POST", "/repair", json={"query": query, **context}) if diag and diag["is_error"] else None
+        if diag:
+            remember(query, diag["error_class"])
+
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.markdown(f"{badge(diag['error_class'])} ", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"<span class='muted'>⏱️ {diag['latency_ms']:.0f}ms</span>", unsafe_allow_html=True)
+
+            if diag["error_class"] == "CORRECT":
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+                            border: 2px solid #10b981; border-radius: 12px; padding: 20px; margin: 16px 0;">
+                    <p style="color: #10b981; font-size: 1.2rem; font-weight: 700; margin: 0;">
+                        ✅ Query is Correct
+                    </p>
+                    <p style="color: #cbd5e1; margin: 8px 0 0 0;">No errors detected. This query will execute successfully.</p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
+                            border: 2px solid #ef4444; border-radius: 12px; padding: 20px; margin: 16px 0;">
+                    <p style="color: #ef4444; font-size: 1.2rem; font-weight: 700; margin: 0;">
+                        ❌ {diag['description']}
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
                 issues = (diag.get("analysis") or {}).get("issues", [])
-                for issue in issues:
-                    st.markdown(f"- **{issue['error_class']}** — {html.escape(issue['message'])}")
+                if issues:
+                    st.markdown("<div style='margin: 16px 0;'><strong style='color: #e0f2fe;'>🔍 Issues Found:</strong></div>", unsafe_allow_html=True)
+                    for issue in issues:
+                        st.markdown(f"""
+                        <div style="background: rgba(59, 130, 246, 0.05); border-left: 3px solid #3b82f6;
+                                    padding: 12px 16px; margin: 8px 0; border-radius: 6px;">
+                            <strong style="color: #3b82f6;">{issue['error_class']}</strong>
+                            <p style="color: #cbd5e1; margin: 4px 0 0 0;">{html.escape(issue['message'])}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
                 for note in diag.get("notes", []):
-                    st.info(note)
+                    st.markdown(f"<div class='info-box'>💡 {note}</div>", unsafe_allow_html=True)
 
-                if rep:
-                    r = rep["repair"]
-                    st.subheader("Repair")
-                    if r["success"]:
-                        st.success("Verified fix — the repaired query passes every check.")
-                    else:
-                        st.warning(f"No complete fix found (remaining: {r['remaining_error']}).")
-                    if r["repaired_query"]:
-                        st.markdown(diff_html(query, r["repaired_query"]), unsafe_allow_html=True)
-                    for i, s in enumerate(r["steps"], 1):
-                        st.markdown(f"{i}. `{s['error_class']}` {html.escape(s['description'])}")
-                    if not r["success"]:
-                        st.caption(r["explanation"])
+            if rep:
+                r = rep["repair"]
+                st.divider()
+                st.markdown("### 🔧 Here's the fix")
+                if r["success"]:
+                    st.success("✅ **Verified fix** — This repaired query is 100% correct.")
+                else:
+                    st.warning(f"⚠️ **Partial fix** — Some issues remain: {r['remaining_error']}")
+                if r["repaired_query"]:
+                    st.markdown("**Changed query:**")
+                    st.markdown(diff_html(query, r["repaired_query"]), unsafe_allow_html=True)
 
+                st.markdown("**What was fixed:**")
+                for i, s in enumerate(r["steps"], 1):
+                    st.write(f"{i}. **{s['error_class']}** — {html.escape(s['description'])}")
+
+                if not r["success"]:
+                    st.info(f"Why not fully fixed: {r['explanation']}")
+
+            with st.expander("📈 AI confidence scores", expanded=False):
                 model = diag.get("model")
                 if model:
-                    st.subheader("Model")
-                    probs = pd.DataFrame({"class": list(model["probabilities"]),
-                                          "probability": list(model["probabilities"].values())}).sort_values("probability")
-                    st.bar_chart(probs, x="class", y="probability", horizontal=True, height=240)
+                    probs = pd.DataFrame({"Error type": list(model["probabilities"]),
+                                          "Confidence": list(model["probabilities"].values())}).sort_values("Confidence")
+                    st.bar_chart(probs, x="Error type", y="Confidence", horizontal=True, height=240)
+
+            with st.expander("🎯 What words caused this error?", expanded=explain):
                 exp = diag.get("explanation")
                 if exp and "query_tokens" in exp:
-                    st.markdown(f"**Why {exp['target_class']}?** "
-                                "<span class='muted'>red pushes towards the prediction, blue against</span>",
+                    st.markdown("<span class='muted'>Red = points to error, Blue = against error</span>",
                                 unsafe_allow_html=True)
                     st.markdown(token_html(exp["query_tokens"]), unsafe_allow_html=True)
                 elif exp and "error" in exp:
-                    st.caption(exp["error"])
-        else:
-            st.caption("Enter a query and press *Diagnose and repair*. Pick the database in the sidebar.")
+                    st.info(exp["error"])
+                else:
+                    st.caption("No word-level explanation available for this error type.")
+    else:
+        st.info("💡 **How to use:**\n1. Paste a SQL query (or load an example)\n2. Pick your database in the sidebar\n3. Click 'Check this query'\n4. We'll tell you what's wrong and how to fix it!")
 
 # ---- NL -> SQL
 with tab_nl:
+    st.markdown("### 🤖 Turn Your Question Into SQL")
+    st.markdown("Ask a question in English, and we'll generate the SQL query to answer it.")
+
     if "db_id" not in context and "database_schema" not in context:
-        st.info("Choose an example database or a custom schema in the sidebar first.")
-    question = st.text_input("Question", value="How many singers are older than 30?")
-    k = st.slider("Candidates", 1, 5, 3)
-    if st.button("Generate SQL", type="primary") and question.strip():
-        with st.spinner("Generating, verifying and repairing (the first request loads the model) ..."):
+        st.warning("⚠️ **Choose a database first** — Pick one in the sidebar under 'Database schema'")
+
+    question = st.text_input("Ask a question about your data:", value="How many singers are older than 30?",
+                            placeholder="e.g., Show me all users from France")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        k = st.slider("How many options to try?", 1, 5, 3, help="More options = more thorough but slower")
+
+    with col2:
+        st.empty()
+
+    if st.button("💡 Generate SQL", type="primary", use_container_width=True) and question.strip():
+        with st.spinner("🤖 Generating SQL (first use loads the model, takes ~30s)..."):
             res = api("POST", "/nl2sql", timeout=CFG.get("nl2sql_timeout_s", 180),
                       json={"question": question, "num_candidates": k, **context})
         if res:
-            status = {"valid": "Top candidate is valid", "valid_alternative": "A lower-ranked candidate was valid",
-                      "repaired": "Generated SQL was invalid and has been repaired",
-                      "invalid": "No valid SQL could be produced"}.get(res["status"], res["status"])
-            (st.success if res["status"] != "invalid" else st.error)(status)
+            st.divider()
+            st.markdown("### 📋 Generated SQL Query")
+
+            status_msgs = {
+                "valid": ("✅ Perfect! The generated SQL is valid.", "success"),
+                "valid_alternative": ("⚠️ Top choice had issues, but we found a valid alternative.", "warning"),
+                "repaired": ("✅ Generated SQL was invalid, but we fixed it.", "success"),
+                "invalid": ("❌ We couldn't generate valid SQL.", "error")
+            }
+            msg, func = status_msgs.get(res["status"], (res["status"], "info"))
+            getattr(st, func)(msg)
+
             if res["sql"]:
+                st.markdown("**Best SQL for your question:**")
                 st.markdown(sql_box(res["sql"]), unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame([{"rank": c["rank"], "sql": c["sql"], "confidence": c["confidence"],
-                                        "verdict": c["error_class"], "issues": "; ".join(c["issues"])}
-                                       for c in res["candidates"]]), hide_index=True, width="stretch")
+
             if res.get("repair"):
-                st.caption(res["repair"]["explanation"])
+                st.info(f"💡 {res['repair']['explanation']}")
+
             if res.get("prompt_truncated"):
-                st.warning("The schema was too long for the generator's input and was truncated.")
-            st.caption(f"Generator {res['generator']} · {res['latency_ms']:.0f} ms")
+                st.warning("⚠️ Your schema was long so it was truncated (might affect accuracy)")
+
+            with st.expander(f"📊 See all {len(res['candidates'])} options tried", expanded=False):
+                st.dataframe(pd.DataFrame([{"Rank": c["rank"], "SQL": c["sql"], "Confidence": f"{c['confidence']*100:.0f}%",
+                                            "Valid?": c["error_class"], "Issues": "; ".join(c["issues"]) if c["issues"] else "—"}
+                                           for c in res["candidates"]]), hide_index=True, use_container_width=True)
+
+            st.caption(f"⏱️ {res['latency_ms']:.0f}ms • Generator: {res['generator']}")
 
 # ---- Batch
 with tab_batch:
-    st.write("Diagnose many queries against the schema selected in the sidebar, or upload a CSV with a "
-             "`query` column (and optionally `db_id`).")
-    mode = st.radio("Input", ["Paste queries", "Upload CSV"], horizontal=True)
-    do_repair = st.checkbox("Repair erroneous queries", value=True)
+    st.markdown("### 🚀 Check Many Queries at Once")
+    st.markdown("Test hundreds of queries in seconds. Either paste them one per line, or upload a CSV file.")
+
+    mode = st.radio("How would you like to input queries?", ["📝 Paste queries", "📁 Upload CSV file"], horizontal=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        do_repair = st.checkbox("Also fix erroneous queries?", value=True, help="Automatic repair takes extra time")
+
     results = None
-    if mode == "Paste queries":
-        text = st.text_area("One query per line", height=160,
-                            value="SELECT Name FROM singer\nSELECT Nmae FROM singer\nSELECT count(*) FROM singers")
-        if st.button("Run batch", type="primary"):
+    if mode == "📝 Paste queries":
+        st.markdown("**Enter one SQL query per line:**")
+        text = st.text_area("Your queries:", height=160, label_visibility="collapsed",
+                            value="SELECT Name FROM singer\nSELECT Nmae FROM singer\nSELECT count(*) FROM singers",
+                            placeholder="SELECT * FROM users\nSELECT id FROM orders\nSELECT * FROM unknown_table")
+        if st.button("🔍 Check all queries", type="primary", use_container_width=True):
             queries = [q for q in text.splitlines() if q.strip()]
-            results = api("POST", "/batch", json={"queries": queries, "repair": do_repair, **context}) if queries else None
+            if queries:
+                with st.spinner(f"Checking {len(queries)} queries..."):
+                    results = api("POST", "/batch", json={"queries": queries, "repair": do_repair, **context})
+            else:
+                st.error("Please enter at least one query")
     else:
-        up = st.file_uploader("CSV file", type=["csv"])
-        if up is not None and st.button("Process file", type="primary"):
+        st.markdown("**CSV file format:** Column named `query` with your SQL. Optional: `db_id` column for different databases.")
+        up = st.file_uploader("Choose a CSV file:", type=["csv"], label_visibility="collapsed")
+        if up is not None and st.button("📊 Process file", type="primary", use_container_width=True):
             params = {"repair": str(do_repair).lower()}
             if "db_id" in context:
                 params["db_id"] = context["db_id"]
-            results = api("POST", "/upload", params=params, files={"file": (up.name, up.getvalue(), "text/csv")},
-                          timeout=600)
+            with st.spinner("Processing file..."):
+                results = api("POST", "/upload", params=params, files={"file": (up.name, up.getvalue(), "text/csv")},
+                              timeout=600)
+
     if results:
+        st.divider()
+        st.markdown("### 📊 Results Summary")
         df = pd.DataFrame(results)
         a, b, c = st.columns(3)
-        a.metric("Queries", len(df))
-        b.metric("With errors", int(df["is_error"].sum()))
+        a.metric("Total queries", len(df), help="How many queries you tested")
+        b.metric("Queries with errors", int(df["is_error"].sum()),
+                help=f"{100*df['is_error'].sum()/len(df):.0f}% error rate")
         if "repair_success" in df:
-            c.metric("Repaired", int(df["repair_success"].fillna(False).sum()))
+            repaired = int(df["repair_success"].fillna(False).sum())
+            c.metric("Successfully repaired", repaired, help=f"{100*repaired/df['is_error'].sum():.0f}% of errors fixed")
+
+        st.markdown("**Error distribution:**")
         st.bar_chart(df["error_class"].value_counts())
-        st.dataframe(df, width="stretch", hide_index=True)
-        st.download_button("Download results (CSV)", df.to_csv(index=False), "sqldiagnose_results.csv", "text/csv")
+
+        st.markdown("**Detailed results:**")
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        st.download_button("⬇️ Download as CSV", df.to_csv(index=False), "sqldiagnose_results.csv", "text/csv")
 
 # ---- Schema
 with tab_schema:
-    st.write("Import a schema; it becomes the *Custom schema* in the sidebar.")
-    how = st.radio("Source", ["CREATE TABLE statements", "SQLite file", "Live PostgreSQL / MySQL"], horizontal=True)
+    st.markdown("### 📂 Import Your Database Schema")
+    st.markdown("Load your database structure from multiple sources. Once imported, it will appear in the sidebar as 'Custom schema'.")
+
+    how = st.radio("How do you want to import?",
+                   ["📝 SQL CREATE statements", "📁 SQLite file", "🔌 Live database connection"],
+                   horizontal=False, label_visibility="collapsed")
+
     parsed = None
-    if how == "CREATE TABLE statements":
-        dialect = st.selectbox("Dialect", ["sqlite", "postgres", "mysql", "tsql", "oracle", "snowflake", "bigquery"])
-        ddl = st.text_area("DDL", height=200, value="CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(80), age INT);\n"
-                                                    "CREATE TABLE orders (id INT PRIMARY KEY, user_id INT REFERENCES users(id), total DECIMAL(10,2));")
-        if st.button("Parse DDL", type="primary"):
-            parsed = api("POST", "/schemas/parse-ddl", json={"ddl": ddl, "dialect": dialect})
-    elif how == "SQLite file":
-        up = st.file_uploader("SQLite database", type=["sqlite", "db", "sqlite3"])
-        if up is not None and st.button("Read schema", type="primary"):
-            parsed = api("POST", "/schemas/parse-sqlite", files={"file": (up.name, up.getvalue(), "application/octet-stream")})
+    st.divider()
+
+    if how == "📝 SQL CREATE statements":
+        st.markdown("**Paste your CREATE TABLE statements:**")
+        dialect = st.selectbox("SQL Dialect:", ["sqlite", "postgres", "mysql", "tsql", "oracle", "snowflake", "bigquery"],
+                              help="Which SQL dialect are your statements in?")
+        ddl = st.text_area("Your SQL:", height=200, label_visibility="collapsed",
+                          value="CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(80), age INT);\n"
+                                "CREATE TABLE orders (id INT PRIMARY KEY, user_id INT REFERENCES users(id), total DECIMAL(10,2));",
+                          placeholder="CREATE TABLE users (\n  id INT PRIMARY KEY,\n  name VARCHAR(80)\n);")
+        if st.button("✅ Parse SQL", type="primary", use_container_width=True):
+            with st.spinner("Parsing..."):
+                parsed = api("POST", "/schemas/parse-ddl", json={"ddl": ddl, "dialect": dialect})
+
+    elif how == "📁 SQLite file":
+        st.markdown("**Upload a .sqlite or .db file:**")
+        up = st.file_uploader("Choose SQLite file:", type=["sqlite", "db", "sqlite3"], label_visibility="collapsed")
+        if up is not None and st.button("📖 Read schema", type="primary", use_container_width=True):
+            with st.spinner("Reading..."):
+                parsed = api("POST", "/schemas/parse-sqlite", files={"file": (up.name, up.getvalue(), "application/octet-stream")})
+
     else:
-        engine = st.selectbox("Engine", ["postgresql", "mysql"])
+        st.markdown("**Connect to a live database:**")
+        engine = st.selectbox("Database type:", ["postgresql", "mysql"], label_visibility="collapsed")
+
         if engine == "postgresql":
-            dsn = st.text_input("libpq connection string", value="dbname=mydb user=postgres host=localhost port=5432")
+            dsn = st.text_input("Connection string:", value="dbname=mydb user=postgres host=localhost port=5432",
+                              placeholder="dbname=mydb user=postgres host=localhost")
             conn = {"dsn": dsn}
         else:
             c1, c2 = st.columns(2)
-            conn = {"host": c1.text_input("Host", "localhost"), "port": int(c2.number_input("Port", value=3306)),
-                    "user": c1.text_input("User", "root"), "password": c2.text_input("Password", type="password"),
-                    "database": c1.text_input("Database", "mydb")}
-        st.caption("Credentials are sent to the API only for this request and are not stored.")
-        if st.button("Connect and read schema", type="primary"):
-            parsed = api("POST", "/schemas/parse-live", json={"engine": engine, "connection": conn})
+            conn = {"host": c1.text_input("Host:", "localhost"), "port": int(c2.number_input("Port:", value=3306)),
+                    "user": c1.text_input("User:", "root"), "password": c2.text_input("Password:", type="password"),
+                    "database": c1.text_input("Database:", "mydb")}
+
+        st.info("🔒 Your credentials are sent only for this request and are not stored.")
+        if st.button("🔌 Connect & import", type="primary", use_container_width=True):
+            with st.spinner("Connecting..."):
+                parsed = api("POST", "/schemas/parse-live", json={"engine": engine, "connection": conn})
+
     if parsed:
+        st.divider()
         ss.custom_schema = parsed["database_schema"]
-        st.success(f"Parsed {len(ss.custom_schema)} tables. Select *Custom schema* in the sidebar to use it.")
-        st.json(ss.custom_schema, expanded=False)
+        st.success(f"✅ **Imported {len(ss.custom_schema)} tables!**\n\nNow select 'Custom schema' in the sidebar to use it.")
+        with st.expander("Preview your schema", expanded=True):
+            st.json(ss.custom_schema, expanded=False)
 
 # ---- Results (read from the evaluation outputs on disk)
 with tab_results:
+    st.markdown("### 📈 How Accurate Is SQLDiagnose?")
+    st.markdown("This shows how well our AI models perform on real databases.")
+
     results_path = PROJECT_ROOT / "reports" / "results.json"
     if not results_path.exists():
-        st.info("No evaluation results yet. Run `python -m evaluation.evaluate --model-dir <checkpoint>`.")
+        st.warning("📌 No evaluation results found. Run `make evaluate` to generate them.")
     else:
         res = json.loads(results_path.read_text())
         main = res.get("main_model")
         clf = res["classifiers"].get(main, {}) if main else {}
         rep_all = res.get("repair", {}).get("ALL", {})
         nl = res.get("nl2sql") or {}
-        st.write(f"Test set: {res['dataset']['test']} queries from {res['dataset']['test_dbs']} databases that never "
-                 f"appear in training.")
+
+        st.markdown(f"**Test data:** {res['dataset']['test']} queries tested from {res['dataset']['test_dbs']} different databases (never seen during training)")
+
+        st.divider()
+        st.markdown("### 🎯 Key Results")
+
         k1, k2, k3, k4 = st.columns(4)
         if clf:
             base = res["classifiers"]["TF-IDF + LogReg"]
-            k1.metric("Classifier accuracy", f"{100 * clf['accuracy']:.1f}%",
-                      f"{100 * (clf['accuracy'] - base['accuracy']):+.1f} vs TF-IDF")
-            k2.metric("Macro-F1", f"{100 * clf['macro_f1']:.1f}")
+            k1.metric("Error Detection", f"{100 * clf['accuracy']:.1f}%",
+                      f"+{100 * (clf['accuracy'] - base['accuracy']):.1f}% vs simple method")
+            k2.metric("Precision (F1)", f"{100 * clf['macro_f1']:.1f}%", help="Consistency across all 8 error types")
         if rep_all:
-            k3.metric("Verified repairs", f"{100 * rep_all['verified_rate']:.1f}%",
-                      f"{100 * rep_all['exact_rate']:.1f}% exact", delta_color="off")
+            k3.metric("Repair Success", f"{100 * rep_all['verified_rate']:.1f}%",
+                      f"{100 * rep_all['exact_rate']:.1f}% perfect fixes", delta_color="off")
         if nl:
-            k4.metric("NL→SQL valid SQL", f"{100 * nl['final_validity']:.1f}%",
-                      f"{100 * (nl['final_validity'] - nl['raw_validity']):+.1f} vs raw generation")
-        st.subheader("Classification")
-        st.dataframe(pd.DataFrame([{"system": n, "accuracy": round(100 * v["accuracy"], 1),
-                                    "macro-F1": round(100 * v["macro_f1"], 1),
-                                    "ROC-AUC": round(100 * (v.get("macro_roc_auc") or 0), 1)}
-                                   for n, v in res["classifiers"].items()]), hide_index=True, width="stretch")
+            k4.metric("SQL Generation", f"{100 * nl['final_validity']:.1f}%",
+                      f"+{100 * (nl['final_validity'] - nl['raw_validity']):.1f}% after fixing")
+
+        st.divider()
+        st.markdown("### 📊 System Comparison")
+        st.markdown("How does SQLDiagnose compare to other methods?")
+        st.dataframe(pd.DataFrame([{"System": n, "Accuracy": f"{100 * v['accuracy']:.1f}%",
+                                    "Consistency (F1)": f"{100 * v['macro_f1']:.1f}%",
+                                    "AUC Score": f"{100 * (v.get('macro_roc_auc') or 0):.1f}%"}
+                                   for n, v in res["classifiers"].items()]), hide_index=True, use_container_width=True)
+
+        st.divider()
+        st.markdown("### 📸 Visual Breakdown")
         fig = PROJECT_ROOT / "reports" / "figures"
         c1, c2 = st.columns(2)
-        for col, name, cap in ((c1, "confusion_matrix.png", "Confusion matrix"),
-                               (c2, "per_class_f1.png", "Per-class F1"),
-                               (c1, "repair_by_class.png", "Repair by class"),
-                               (c2, "nl2sql_pipeline.png", "NL→SQL pipeline"),
-                               (c1, "training_curve.png", "Training curve"),
+        for col, name, cap in ((c1, "confusion_matrix.png", "What errors were confused?"),
+                               (c2, "per_class_f1.png", "Accuracy by error type"),
+                               (c1, "repair_by_class.png", "Repair success by error"),
+                               (c2, "nl2sql_pipeline.png", "Question→SQL performance"),
+                               (c1, "training_curve.png", "Training progress"),
                                (c2, "reliability.png", "Calibration")):
             if (fig / name).exists():
                 col.image(str(fig / name), caption=cap)
-        st.caption("Full report: reports/evaluation_report.md")
+
+        with st.expander("📄 Read the full technical report"):
+            st.markdown("[Full evaluation report](reports/evaluation_report.md)")
+            st.markdown("[Research paper draft](reports/paper_draft.md)")
 
 # ---- Service
 with tab_stats:
+    st.markdown("### 📊 Service Status & Activity")
+    st.markdown("Real-time statistics about the running SQLDiagnose service.")
+
     m = api("GET", "/metrics") if health else None
     if m:
+        st.divider()
+        st.markdown("### 📈 Activity This Session")
         a, b, c, d = st.columns(4)
-        a.metric("Diagnoses", m["diagnoses"])
-        b.metric("Mean latency", f"{m['mean_diagnosis_latency_ms']:.0f} ms")
-        c.metric("Repairs", m["repairs"])
-        d.metric("Successful repairs", m["repairs_successful"])
+        a.metric("Diagnoses run", m["diagnoses"], help="How many queries you've checked")
+        b.metric("Speed", f"{m['mean_diagnosis_latency_ms']:.0f} ms", help="Average time to diagnose a query")
+        c.metric("Repairs attempted", m["repairs"], help="How many broken queries we tried to fix")
+        d.metric("Fixed", m["repairs_successful"], help=f"{100*m['repairs_successful']/max(m['repairs'],1):.0f}% success rate")
+
+        st.markdown("**Errors found in this session:**")
         counts = pd.Series(m["class_counts"])
         if counts.sum():
             st.bar_chart(counts[counts > 0])
-        st.caption(f"Uptime {m['uptime_s'] / 60:.1f} min · requests {m['requests']}")
+        else:
+            st.info("No queries checked yet!")
+
+        st.caption(f"⏱️ Uptime: {m['uptime_s'] / 60:.1f} min • Total requests: {m['requests']}")
+
+    st.divider()
+    st.markdown("### 🤖 AI Model Info")
     if health and health.get("model"):
-        st.subheader("Loaded classifier")
-        st.json(health["model"], expanded=False)
+        with st.expander("Classifier details", expanded=False):
+            model_info = health.get("model", {})
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Model", model_info.get('backbone', 'Unknown'))
+                st.metric("Training F1", f"{(model_info.get('validation', {}).get('macro_f1', 0)):.1%}")
+            with col2:
+                st.metric("Parameters", f"{model_info.get('num_parameters', 0):,}")
+                if "checkpoint_size_mb" in model_info:
+                    st.metric("Size on disk", f"{model_info['checkpoint_size_mb']:.0f} MB")
+
+    st.divider()
+    st.markdown("### 📋 The 8 Error Classes")
     labels = api("GET", "/labels") if health else None
     if labels:
-        st.subheader("Error classes")
-        st.dataframe(pd.DataFrame(labels), hide_index=True, width="stretch")
+        label_df = pd.DataFrame(labels)
+        st.dataframe(label_df, hide_index=True, use_container_width=True)
+    else:
+        st.info("Error class definitions not available")
 
 
 # ---- sidebar history (rendered last so it includes the query just run)
 with history_box:
     if not ss.history:
-        st.caption("Nothing yet.")
-    for i, h in enumerate(ss.history):
-        st.button(f"{h['class']}: {h['query'][:32]}", key=f"hist{i}", width="stretch",
-                  on_click=restore, args=(h["query"],))
+        st.caption("🚀 Check your first query to see history here")
+    else:
+        for i, h in enumerate(ss.history):
+            label = f"✅ {h['class']}" if h['class'] == "CORRECT" else f"❌ {h['class']}"
+            st.button(f"{label}: {h['query'][:28]}", key=f"hist{i}", use_container_width=True,
+                      on_click=restore, args=(h["query"],))
