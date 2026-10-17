@@ -19,3 +19,13 @@ logs/
 *.log
 .DS_Store
 Thumbs.db
+
+# Web app workspace (history, saved schemas, uploaded databases)
+data/workspace/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/coverage/

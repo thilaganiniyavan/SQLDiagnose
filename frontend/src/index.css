@@ -1,0 +1,258 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens. Neutral surfaces + one blue accent; status colours are reserved for verdicts;
+   the error classes use the fixed categorical order (validated for colour-vision deficiency). */
+:root {
+  --page: #f6f5f2;
+  --surface: #fcfcfb;
+  --surface-2: #f0efeb;
+  --surface-3: #e7e6e0;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #6b6a65;
+  --line: rgba(11, 11, 11, 0.1);
+  --line-strong: rgba(11, 11, 11, 0.2);
+  --grid: #e1e0d9;
+  --accent: #2a78d6;
+  --accent-hover: #256abf;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(42, 120, 214, 0.1);
+  --accent-text: #1c5cab;
+  --focus: rgba(42, 120, 214, 0.45);
+
+  --good: #0ca30c;
+  --good-text: #006300;
+  --good-soft: rgba(12, 163, 12, 0.1);
+  --warning: #fab219;
+  --warning-text: #7a4f00;
+  --warning-soft: rgba(250, 178, 25, 0.16);
+  --critical: #d03b3b;
+  --critical-text: #b02a2a;
+  --critical-soft: rgba(208, 59, 59, 0.09);
+
+  --cat-1: #2a78d6;
+  --cat-2: #eb6834;
+  --cat-3: #1baf7a;
+  --cat-4: #eda100;
+  --cat-5: #e87ba4;
+  --cat-6: #4a3aa7;
+  --cat-7: #e34948;
+
+  --seq-0: #f0efec;
+  --seq-1: #cde2fb;
+  --seq-2: #86b6ef;
+  --seq-3: #3987e5;
+  --seq-4: #1c5cab;
+  --seq-5: #0d366b;
+
+  --syn-string: #0b7a50;
+  --syn-number: #b4471a;
+
+  --diverge-pos: 227, 73, 72;
+  --diverge-neg: 42, 120, 214;
+
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.04), 0 1px 1px rgba(11, 11, 11, 0.03);
+  --shadow-lg: 0 12px 32px -8px rgba(11, 11, 11, 0.18), 0 2px 6px rgba(11, 11, 11, 0.06);
+}
+
+.dark {
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --surface-3: #2e2e2b;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-muted: #9a988f;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.2);
+  --grid: #2c2c2a;
+  --accent: #3987e5;
+  --accent-hover: #5598e7;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(57, 135, 229, 0.16);
+  --accent-text: #86b6ef;
+  --focus: rgba(57, 135, 229, 0.55);
+
+  --good: #0ca30c;
+  --good-text: #3fc23f;
+  --good-soft: rgba(12, 163, 12, 0.16);
+  --warning: #fab219;
+  --warning-text: #fab219;
+  --warning-soft: rgba(250, 178, 25, 0.14);
+  --critical: #e66767;
+  --critical-text: #f08a8a;
+  --critical-soft: rgba(230, 103, 103, 0.14);
+
+  --cat-1: #3987e5;
+  --cat-2: #d95926;
+  --cat-3: #199e70;
+  --cat-4: #c98500;
+  --cat-5: #d55181;
+  --cat-6: #9085e9;
+  --cat-7: #e66767;
+
+  --seq-0: #262624;
+  --seq-1: #104281;
+  --seq-2: #1c5cab;
+  --seq-3: #3987e5;
+  --seq-4: #86b6ef;
+  --seq-5: #cde2fb;
+
+  --syn-string: #5cd6a6;
+  --syn-number: #f0a070;
+
+  --diverge-pos: 230, 103, 103;
+  --diverge-neg: 57, 135, 229;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 40px -8px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-good: var(--good);
+  --color-good-text: var(--good-text);
+  --color-good-soft: var(--good-soft);
+  --color-warning: var(--warning);
+  --color-warning-text: var(--warning-text);
+  --color-warning-soft: var(--warning-soft);
+  --color-critical: var(--critical);
+  --color-critical-text: var(--critical-text);
+  --color-critical-soft: var(--critical-soft);
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  --shadow-card: var(--shadow);
+  --shadow-pop: var(--shadow-lg);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  button,
+  [role='button'],
+  label[for],
+  summary {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .sql {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+/* CodeMirror in the app's colours */
+.cm-theme .cm-editor {
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  border-radius: 10px;
+}
+.cm-theme .cm-editor.cm-focused {
+  outline: none;
+}
+.cm-theme .cm-scroller {
+  font-family: var(--font-mono);
+  line-height: 1.65;
+}
+.cm-theme .cm-gutters {
+  background: var(--surface);
+  color: var(--ink-muted);
+  border-right: 1px solid var(--line);
+  border-radius: 10px 0 0 10px;
+}
+.cm-theme .cm-activeLine,
+.cm-theme .cm-activeLineGutter {
+  background: var(--accent-soft);
+}
+.cm-theme .cm-content {
+  caret-color: var(--accent);
+  padding: 10px 0;
+}
+.cm-theme .cm-cursor {
+  border-left-color: var(--accent);
+  border-left-width: 2px;
+}
+.cm-theme .cm-selectionBackground,
+.cm-theme .cm-focused .cm-selectionBackground {
+  background: var(--accent-soft) !important;
+}
+.cm-theme .cm-placeholder {
+  color: var(--ink-muted);
+}
+.cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.cm-tooltip.cm-tooltip-autocomplete > ul {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.cm-completionDetail {
+  color: var(--ink-muted);
+  font-style: normal;
+  margin-left: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
