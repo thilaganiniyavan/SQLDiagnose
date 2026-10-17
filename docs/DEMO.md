@@ -13,6 +13,10 @@ Warm-up (so nothing loads during the demo): run one diagnosis, and one *Question
 first NL2SQL request loads the generator (~10 s); on this laptop a question takes 10–60 s. Keep the laptop plugged in.
 Clear old entries on the *History* page if you want a clean slate.
 
+To let the audience open the app on their own devices, run `make demo` instead of `make api`: it prints a public
+`https://<random>.trycloudflare.com` link (new each run, valid while it runs; Ctrl+C stops it). Live
+PostgreSQL/MySQL schema import is disabled on this link, and the laptop must stay awake and online.
+
 ## Walkthrough
 
 1. **The problem (30 s).** Database errors say *that* a query failed (`near "x": syntax error`), not *why*, and
