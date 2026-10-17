@@ -1,16 +1,17 @@
-# docker compose -f deployment/docker-compose.yml up --build
+# docker compose -f deployment/docker-compose.yml up --build      ->  http://localhost:8000
 services:
-  api:
+  sqldiagnose:
     build: { context: .., dockerfile: deployment/Dockerfile }
     ports: ["8000:8000"]
-    volumes:
-      - hf-cache:/app/.cache/huggingface     # keeps the NL2SQL generator download between restarts
-  ui:
-    build: { context: .., dockerfile: deployment/Dockerfile }
-    command: ["python", "-m", "streamlit", "run", "frontend/app.py", "--server.address", "0.0.0.0"]
     environment:
-      SQLDIAGNOSE_API_URL: http://api:8000/api/v1
-    ports: ["8501:8501"]
-    depends_on: [api]
+      # Live PostgreSQL/MySQL introspection connects to arbitrary hosts; keep it off on shared deployments.
+      SQLDIAGNOSE_LIVE_SCHEMA: "false"
+    volumes:
+      - workspace:/app/data/workspace          # history, saved schemas, uploaded SQLite files
+      - hf-cache:/app/.cache/huggingface       # keeps the NL2SQL generator download between restarts
+      # data of the example databases (make data), so queries can be run on them; empty if not downloaded
+      - ../data/raw/spider_data/database:/app/data/raw/spider_data/database:ro
+    restart: unless-stopped
 volumes:
+  workspace:
   hf-cache:

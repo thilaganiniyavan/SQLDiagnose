@@ -1,6 +1,11 @@
 .venv
 .git
-data/raw
 **/__pycache__
 .pytest_cache
 models/checkpoints/*/last
+data/workspace
+data/raw/*.zip
+frontend/node_modules
+frontend/dist
+frontend/test-results
+frontend/playwright-report
