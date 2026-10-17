@@ -1,6 +1,8 @@
 # api_config.yaml
-# FastAPI service configuration. Environment variables override the model settings:
-#   SQLDIAGNOSE_MODEL_DIR, SQLDIAGNOSE_DEVICE, SQLDIAGNOSE_GENERATOR
+# FastAPI service configuration (it also serves the web app from frontend/dist once built).
+# Environment variables override these settings:
+#   SQLDIAGNOSE_MODEL_DIR, SQLDIAGNOSE_DEVICE, SQLDIAGNOSE_GENERATOR, SQLDIAGNOSE_WORKSPACE_DIR,
+#   SQLDIAGNOSE_EXAMPLE_DB_DIR, SQLDIAGNOSE_FRONTEND_DIST, SQLDIAGNOSE_LIVE_SCHEMA (true/false)
 
 server:
   host: "0.0.0.0"
@@ -8,14 +10,25 @@ server:
 
 api:
   title: "SQLDiagnose API"
-  version: "2.0.0"
-  model_dir: "models/checkpoints/codeberta-small-ft/best"   # 3 epochs + 2 epochs continued fine-tuning   # fine-tuned classifier (training/train.py output)
+  version: "2.1.0"
+  model_dir: "models/checkpoints/codeberta-small-ft/best"   # fine-tuned classifier (3 epochs + 2 epochs continued)
   device: "cpu"                                          # cpu | cuda
   model_threshold: 0.8        # minimum model confidence for model-only verdicts / warnings
   generator: "Qwen/Qwen2.5-Coder-0.5B-Instruct"   # or "cssupport/t5-small-awesome-text-to-sql" (smaller, faster, weaker)
-  load_generator_on_startup: false   # otherwise loaded on the first /nl2sql request
+  load_generator_on_startup: false   # otherwise loaded on the first NL->SQL request
   max_batch: 500
+  max_pending_jobs: 20               # queued NL->SQL requests before the API answers 429
   enable_live_schema_parsing: true   # POST /schemas/parse-live connects to PostgreSQL/MySQL; disable when exposed publicly
-  cors_origins:
-    - "http://localhost:8501"
-    - "http://127.0.0.1:8501"
+
+  workspace_dir: "data/workspace"    # history and saved schemas (SQLite) + uploaded SQLite files
+  max_upload_mb: 100                 # largest SQLite file kept in the workspace
+  example_db_dir: "data/raw/spider_data/database"   # real data for the example databases (make data)
+  execution:                         # POST /execute (read-only, against real data)
+    timeout_s: 5
+    max_rows: 1000
+
+  reports_dir: "reports"             # evaluation results shown on the Results page
+  frontend_dist: "frontend/dist"     # built web app (make frontend)
+  cors_origins:                      # only needed when the UI is served from another origin
+    - "http://localhost:5173"
+    - "http://127.0.0.1:5173"

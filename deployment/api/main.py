@@ -1,8 +1,11 @@
 # main.py
 # Clean Architecture: Frameworks & Drivers
-# FastAPI application: configuration, model loading and shared state.
+# FastAPI application: configuration, model loading, shared state and the web app.
 #
 #   python -m uvicorn deployment.api.main:app --port 8000
+#
+# When the React app has been built (frontend/dist), it is served from the same origin: the UI at
+# http://localhost:8000/, the REST API under /api/v1 and the interactive API docs at /docs.
 
 import json
 import logging
@@ -15,13 +18,17 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 
 from models.domain.labels import CLASS_NAMES
 from services.diagnosis import DiagnosisService
+from services.jobs import JobQueue
 from services.nl2sql import NL2SQLService
 from services.schema_registry import SchemaRegistry
+from services.workspace import WorkspaceStore
 from .routes import router
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(name)s: %(message)s")
@@ -32,14 +39,34 @@ for _noisy in ("httpx", "httpcore", "huggingface_hub"):
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = PROJECT_ROOT / "configs" / "api_config.yaml"
 
+# environment variable -> api config key
+_ENV_OVERRIDES = {
+    "SQLDIAGNOSE_MODEL_DIR": "model_dir",
+    "SQLDIAGNOSE_DEVICE": "device",
+    "SQLDIAGNOSE_GENERATOR": "generator",
+    "SQLDIAGNOSE_WORKSPACE_DIR": "workspace_dir",
+    "SQLDIAGNOSE_EXAMPLE_DB_DIR": "example_db_dir",
+    "SQLDIAGNOSE_FRONTEND_DIST": "frontend_dist",
+}
+
 
 def load_config(path: Path = CONFIG_PATH) -> Dict[str, Any]:
     cfg = yaml.safe_load(path.read_text()) if path.exists() else {}
     api = cfg.setdefault("api", {})
-    api["model_dir"] = os.environ.get("SQLDIAGNOSE_MODEL_DIR", api.get("model_dir", ""))
-    api["device"] = os.environ.get("SQLDIAGNOSE_DEVICE", api.get("device", "cpu"))
-    api["generator"] = os.environ.get("SQLDIAGNOSE_GENERATOR", api.get("generator", ""))
+    api.setdefault("device", "cpu")
+    for env, key in _ENV_OVERRIDES.items():
+        if env in os.environ:
+            api[key] = os.environ[env]
+    if "SQLDIAGNOSE_LIVE_SCHEMA" in os.environ:
+        api["enable_live_schema_parsing"] = os.environ["SQLDIAGNOSE_LIVE_SCHEMA"].lower() in ("1", "true", "yes")
     return cfg
+
+
+def _project_path(value: Optional[str]) -> Optional[Path]:
+    if not value:
+        return None
+    path = Path(value)
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 class Metrics:
@@ -93,6 +120,16 @@ class AppContext:
         self.generator_error: Optional[str] = None
         self._gen_lock = threading.Lock()
         self._nl2sql: Optional[NL2SQLService] = None
+        self.jobs = JobQueue(max_pending=int(api.get("max_pending_jobs", 20)))
+
+        workspace_dir = _project_path(api.get("workspace_dir", "data/workspace"))
+        self.workspace: Optional[WorkspaceStore] = WorkspaceStore(workspace_dir) if workspace_dir else None
+        self.max_upload_mb = int(api.get("max_upload_mb", 100))
+        self.example_db_dir = _project_path(api.get("example_db_dir", "data/raw/spider_data/database"))
+        execution = api.get("execution", {}) or {}
+        self.exec_timeout_s = float(execution.get("timeout_s", 5))
+        self.exec_max_rows = int(execution.get("max_rows", 1000))
+        self.reports_dir = _project_path(api.get("reports_dir", "reports"))
 
         classifier = None
         model_dir = api.get("model_dir")
@@ -119,6 +156,25 @@ class AppContext:
         if load_models and api.get("load_generator_on_startup"):
             self.nl2sql()
 
+    def example_db_path(self, db_id: str) -> Optional[Path]:
+        """Real SQLite file of a bundled example database, when it has been downloaded (make data)."""
+        if not self.example_db_dir or self.registry.raw(db_id) is None:
+            return None
+        path = self.example_db_dir / db_id / f"{db_id}.sqlite"
+        return path if path.is_file() else None
+
+    def executable_db_ids(self):
+        return [n for n in self.registry.names() if self.example_db_path(n) is not None]
+
+    @property
+    def generator_ready(self) -> bool:
+        return self._nl2sql is not None
+
+    def retry_generator(self):
+        """Forget a previous load failure (e.g. no network) so the next request tries again."""
+        with self._gen_lock:
+            self.generator_error = None
+
     def nl2sql(self) -> Optional[NL2SQLService]:
         """Loads the generator on first use (it is large and not every deployment needs it)."""
         if self._nl2sql is not None or not self.generator_name:
@@ -135,6 +191,40 @@ class AppContext:
         return self._nl2sql
 
 
+# Content-Security-Policy for the web app (not for /docs, which loads Swagger UI from a CDN).
+_APP_CSP = ("default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; "
+            "font-src 'self' data:; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; "
+            "base-uri 'self'; form-action 'self'")
+
+
+def _mount_frontend(app: FastAPI, dist: Path):
+    """Serves the built single-page app; unknown non-API paths fall back to index.html."""
+    index = dist / "index.html"
+    root = dist.resolve()
+
+    def page(path: Path) -> FileResponse:
+        hashed = path.parent.name == "assets"
+        headers = {"Cache-Control": "public, max-age=31536000, immutable" if hashed else "no-cache"}
+        if path.suffix == ".html":
+            headers["Content-Security-Policy"] = _APP_CSP
+        return FileResponse(path, headers=headers)
+
+    @app.get("/", include_in_schema=False)
+    def spa_root():
+        return page(index)
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(404, "Not found")
+        candidate = (dist / full_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(root):
+            return page(candidate)
+        if "." in Path(full_path).name:           # a missing asset, not a client-side route
+            raise HTTPException(404, "Not found")
+        return page(index)
+
+
 def create_app(cfg: Optional[Dict[str, Any]] = None, load_models: bool = True) -> FastAPI:
     cfg = cfg if cfg is not None else load_config()
     api = cfg.get("api", {})
@@ -144,17 +234,39 @@ def create_app(cfg: Optional[Dict[str, Any]] = None, load_models: bool = True) -
         if not hasattr(app.state, "ctx"):
             app.state.ctx = AppContext(cfg, load_models)
         yield
+        if app.state.ctx.workspace:
+            app.state.ctx.workspace.close()
 
     app = FastAPI(title=api.get("title", "SQLDiagnose API"), version=api.get("version", "2.0.0"),
                   description="Diagnose, explain and repair SQL queries; translate questions to verified SQL.",
                   lifespan=lifespan)
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.add_middleware(CORSMiddleware, allow_origins=api.get("cors_origins", ["*"]),
                        allow_methods=["*"], allow_headers=["*"])
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        return response
+
+    @app.exception_handler(Exception)
+    async def unhandled(request: Request, exc: Exception):
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse({"detail": "Internal server error. The details are in the server log."}, status_code=500)
+
     app.include_router(router, prefix="/api/v1")
 
-    @app.get("/", include_in_schema=False)
-    def root():
-        return {"service": "SQLDiagnose", "docs": "/docs", "api": "/api/v1"}
+    dist = _project_path(api.get("frontend_dist", "frontend/dist"))
+    if dist and (dist / "index.html").is_file():
+        _mount_frontend(app, dist)
+    else:
+        @app.get("/", include_in_schema=False)
+        def root():
+            return {"service": "SQLDiagnose", "docs": "/docs", "api": "/api/v1",
+                    "ui": "not built - run `make frontend` (or `cd frontend && npm ci && npm run build`)"}
 
     return app
 

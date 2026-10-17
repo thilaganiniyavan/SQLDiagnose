@@ -10,15 +10,13 @@ pandas>=2.0
 pyarrow>=14
 pyyaml>=6.0
 
-# Service + UI
+# Service
 fastapi>=0.110
 uvicorn>=0.27
 pydantic>=2.5,<3
 python-multipart>=0.0.9
 httpx>=0.27                 # FastAPI TestClient
-streamlit>=1.36
-requests>=2.31
-matplotlib>=3.7
+matplotlib>=3.7            # evaluation figures
 
 # Testing
 pytest>=8.0

@@ -15,10 +15,11 @@ class AccessPolicy(BaseModel):
 
 
 class SchemaContext(BaseModel):
-    """Either an inline schema or the id of a bundled example database (inline wins)."""
+    """An inline schema, a saved workspace schema or a bundled example database (in that order of precedence)."""
     database_schema: Optional[Dict[str, Any]] = Field(
         None, description='{"table": {"columns": {"col": "TYPE"}, "primary_keys": [...], "foreign_keys": [...]}}')
     db_id: Optional[str] = Field(None, description="Name of a bundled example database (see GET /schemas)")
+    schema_id: Optional[str] = Field(None, max_length=64, description="Id of a saved workspace schema")
     access_policy: Optional[AccessPolicy] = None
 
 
@@ -33,6 +34,21 @@ class RepairRequest(SchemaContext):
     query: str = Field(..., min_length=1, max_length=MAX_QUERY_CHARS)
 
 
+class AnalyzeRequest(SchemaContext):
+    """Diagnosis and, when the query is wrong, a verified repair in one call."""
+    query: str = Field(..., min_length=1, max_length=MAX_QUERY_CHARS)
+    explain: bool = False
+    explain_method: Literal["gxi", "ig"] = "gxi"
+    repair: bool = True
+
+
+class ExecuteRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=MAX_QUERY_CHARS)
+    db_id: Optional[str] = None
+    schema_id: Optional[str] = Field(None, max_length=64)
+    max_rows: int = Field(200, ge=1, le=1000)
+
+
 class BatchRequest(SchemaContext):
     queries: List[str] = Field(..., min_length=1)
     repair: bool = False
@@ -41,6 +57,20 @@ class BatchRequest(SchemaContext):
 class NL2SQLRequest(SchemaContext):
     question: str = Field(..., min_length=3, max_length=2_000)
     num_candidates: int = Field(3, ge=1, le=5)
+
+
+class SavedSchemaCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    source: Literal["json", "ddl", "sqlite", "live", "example"] = "json"
+    database_schema: Dict[str, Any]
+    access_policy: Optional[AccessPolicy] = None
+
+
+class SavedSchemaUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
+    database_schema: Optional[Dict[str, Any]] = None
+    access_policy: Optional[AccessPolicy] = None
+    clear_access_policy: bool = False
 
 
 class ParseDDLRequest(BaseModel):
@@ -81,7 +111,12 @@ class HealthResponse(BaseModel):
     model: Optional[Dict[str, Any]] = None
     generator_loaded: bool
     generator: Optional[str] = None
+    generator_error: Optional[str] = None
     example_databases: int
+    executable_databases: int = 0
+    live_schema_enabled: bool = False
+    results_available: bool = False
+    workspace_enabled: bool = False
 
 
 class MetricsResponse(BaseModel):
