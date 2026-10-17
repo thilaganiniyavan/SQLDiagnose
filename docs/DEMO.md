@@ -5,40 +5,47 @@ A 5–7 minute walkthrough of SQLDiagnose, plus answers to the questions reviewe
 ## Before the demo
 
 ```bash
-.venv/bin/python -m uvicorn deployment.api.main:app --port 8000      # wait for "Classifier loaded"
-.venv/bin/python -m streamlit run frontend/app.py                      # opens http://localhost:8501
+make frontend        # once, builds the web app
+make api             # wait for "Classifier loaded", then open http://localhost:8000
 ```
 
 Warm-up (so nothing loads during the demo): run one diagnosis, and one *Question → SQL* request — the
 first NL2SQL request loads the generator (~10 s); on this laptop a question takes 10–60 s. Keep the laptop plugged in.
+Clear old entries on the *History* page if you want a clean slate.
 
 ## Walkthrough
 
 1. **The problem (30 s).** Database errors say *that* a query failed (`near "x": syntax error`), not *why*, and
    logically wrong queries (`= NULL`, missing join condition, non-grouped columns) often produce no error at all.
 
-2. **Several errors at once (1 min).** *Diagnose & repair* → *Load an example* → **Several errors at once**:
-   `SELEC Name, count(*) FORM singr WHERE Age > 'thirty'`.
+2. **Several errors at once (1 min).** *Diagnose & repair* → *Examples* → **Several errors at once** →
+   *Analyze* (or `Ctrl+Enter`): `SELEC Name, count(*) FORM singr WHERE Age > 'thirty'`.
    - Verdict SYNTAX_ERROR (reported first, like a real engine).
    - Repair: five verified steps — two keyword typos, the unknown table `singr → singer`, `'thirty' → 30`,
      and the missing `GROUP BY Name`. The diff shows exactly what changed.
+   - *Use this query* re-checks the fix (no problems found) and *Run query* shows the rows it returns from the
+     real database.
 
-3. **Why the model decided (1 min).** Load **UNKNOWN_TABLE** or **SEMANTIC_ERROR (aggregate in WHERE)** and
+3. **Why the model decided (1 min).** Load **Unknown table** or **Aggregate in WHERE** and
    point at the token attributions: the red tokens (`singers`, `avg`) are what pushed the model to its answer.
    Mention *decided by analyzer+model*: the verified analyzer and the learned classifier agree.
 
-4. **Errors that run without complaint (1 min).** **SEMANTIC_ERROR (missing join condition)** — SQLite would
+4. **Errors that run without complaint (1 min).** **Missing join condition** — SQLite would
    execute it and return a Cartesian product. The repair infers `ON T2.Stadium_ID = T1.Stadium_ID` from the
    foreign key.
 
-5. **Access policy (30 s).** **PERMISSION_DENIED** — the stadium table is marked restricted in the sidebar; the
-   verdict comes from the policy, and the engine deliberately does not "repair" it.
+5. **Access policy (30 s).** **Restricted table (stadium)** — the stadium table shows a lock in the schema panel
+   (any table or column can be locked by clicking its lock icon); the verdict comes from the policy, and the
+   engine deliberately does not "repair" it.
 
 6. **Question → SQL (1 min).** Ask *"Which singers are older than the average age? Show their names and
-   countries."* Show the candidate table: rejected candidates are listed with the reason, and the returned
-   query is one that passed verification.
+   countries."* The progress panel shows each stage. Show the candidate table: rejected candidates are listed
+   with the reason, the returned query is one that passed verification, and *Run query* answers the question.
 
-7. **Results (1 min).** *Results* tab: 87% accuracy on databases never seen in training (vs 53% for TF-IDF),
+7. **Your own database (30 s, optional).** *Schemas* → *CREATE TABLE* → paste a couple of tables → *Read schema*
+   → *Save and use*; every page now checks against it. A SQLite file can be imported with its data.
+
+8. **Results (1 min).** *Research results*: 87% accuracy on databases never seen in training (vs 53% for TF-IDF),
    the confusion matrix, and the NL2SQL comparison (the code LLM with verification + repair answers 55% of
    questions correctly vs 16% for the raw T5 baseline).
 
@@ -70,4 +77,5 @@ Every repair is verified to be valid, and each step is shown. When the intent is
 behind `age > 'young'`) the engine refuses rather than guesses.
 
 **How is it run in production?**
-FastAPI service (`/docs` has the interactive API), Docker image, CSV batch endpoint, CLI.
+One FastAPI service serves the React web app and the REST API (`/docs` has the interactive API); Docker image,
+CSV batch processing, background jobs for NL→SQL, per-browser history and saved schemas, CLI.
