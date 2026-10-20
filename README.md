@@ -90,7 +90,7 @@ A 5-minute demo script with likely reviewer questions is in [`docs/DEMO.md`](doc
   conditions, AST rewrites (`IS NULL`, `HAVING`, `GROUP BY`, scalar subqueries, casts) and a bounded
   single-edit search — re-analyzes every candidate and keeps the smallest verified fix, iterating for
   multi-error queries. It never reports success for a query that does not pass the analyzer.
-* **Dataset** (`data_pipeline/`): errors are injected into Spider gold queries with 25+ span-level mutation
+* **Dataset** (`data_pipeline/`): errors are injected into Spider gold queries with 28 span-level mutation
   operators; every sample is kept only if the analyzer independently confirms its label. Surface features
   (keyword case, spacing, literals, alias names) are randomised for all classes. Train/validation/test use
   disjoint databases (test = Spider-dev databases), see [`data/processed/dataset_report.md`](data/processed/dataset_report.md).
@@ -203,6 +203,17 @@ The image builds the web app in a Node stage and serves it from the API. The wor
 uploaded databases) and the generator download live in named volumes; the example databases' data is mounted
 read-only from `data/raw` when present.
 
+### Public demo link
+
+```bash
+make demo         # serves the app from this machine on a temporary https://<random>.trycloudflare.com link
+```
+
+Uses a [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)
+(needs `cloudflared`, no account). The link is new on every run and works while the command runs; live
+PostgreSQL/MySQL introspection is turned off. `python scripts/deploy_hf.py` deploys to a Hugging Face Docker Space
+instead (needs a Hugging Face account that can host Docker Spaces).
+
 ### Deployment notes
 
 * Run one worker process (`uvicorn … --workers 1`): NL→SQL jobs and the models live in the process. Put a
@@ -227,12 +238,15 @@ services/          use cases: diagnosis (analyzer + model + repair), NL2SQL, sch
                    workspace store, read-only query execution, background jobs
 training/          fine-tuning script (CPU/GPU, resumable)
 evaluation/        metrics, baselines, explainability, full evaluation → reports/
-deployment/        FastAPI app (REST API + serves the web app), Dockerfile, compose file
+deployment/        FastAPI app (REST API + serves the web app), Dockerfile, compose file, Hugging Face Space image
 frontend/          React + TypeScript web app (Vite, Tailwind CSS, CodeMirror), unit and end-to-end tests
 notebooks/         GPU training notebook (Colab/Kaggle)
 configs/           training / API / UI configuration
+scripts/           model download, public demo link, Hugging Face deployment
 data/processed/    generated dataset (jsonl/csv), schemas.json, dataset report
 docs/design/       original research and design documents
+docs/case_study/   case-study report (Word) and presentation (PowerPoint)
+reports/           evaluation results and figures; reports/ieee/ has the IEEE-format paper
 tests/             pytest suite (python -m pytest)
 ```
 

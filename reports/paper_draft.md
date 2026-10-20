@@ -8,7 +8,7 @@ Database error messages tell users *that* a query failed, rarely *why*, and say 
 run but are logically wrong. We present SQLDiagnose, a system that assigns a SQL query to one of eight error
 classes, explains the decision, and proposes a repair that is **verified** before it is returned. Its core is a
 deterministic analyzer that compiles the query against an empty database with the target schema and applies
-portable AST rules; it labels a dataset of 9450 queries built by injecting 25+ kinds of realistic errors into
+portable AST rules; it labels a dataset of 9450 queries built by injecting 28 kinds of realistic errors into
 Spider, keeping only samples whose label the analyzer confirms. A code transformer (CodeBERTa-small, 84M parameters,
 trained on a laptop CPU) that reads the query together with a compact schema description reaches **87.4% accuracy /
 87.6 macro-F1 on databases never seen in training**, against 51.3 for a TF-IDF baseline; without the schema
