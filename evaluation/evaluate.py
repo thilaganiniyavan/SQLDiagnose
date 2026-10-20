@@ -34,7 +34,7 @@ from models.domain.labels import MODEL_CLASSES
 from repair.repair_engine import SQLRepairEngine
 from .baselines import TfidfBaseline
 from .metrics import (bootstrap_ci, classification_metrics, mcnemar_exact, plot_confusion, plot_grouped_bars,
-                      plot_reliability, plot_training_curve)
+                      plot_nl2sql_stages, plot_reliability, plot_training_curve)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
@@ -495,15 +495,8 @@ def main():
             for g, v in res["nl2sql_by_generator"].items():
                 print(g, json.dumps({k: x for k, x in v.items() if k != "invalid_raw_examples"}, indent=1))
             return
-        series = {}
-        for g, v in res["nl2sql_by_generator"].items():
-            short = g.split("/")[-1]
-            series[f"{short}: raw"] = [v["raw_validity"], v["raw_execution_accuracy"]]
-            series[f"{short}: verified+repaired"] = [v["final_validity"], v["final_execution_accuracy"]]
-        if series:
-            plot_grouped_bars(["valid SQL", "execution accuracy"], series, "rate",
-                              "NL2SQL on Spider dev: raw generation vs. verify/select/repair",
-                              fig_dir / "nl2sql_pipeline.png")
+        if res["nl2sql_by_generator"]:
+            plot_nl2sql_stages(res["nl2sql_by_generator"], fig_dir / "nl2sql_pipeline.png")
 
     if main_clf is not None:
         print("[5/5] attributions ...", flush=True)

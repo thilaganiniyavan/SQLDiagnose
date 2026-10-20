@@ -127,6 +127,33 @@ def plot_grouped_bars(groups: List[str], series: Dict[str, List[float]], ylabel:
     plt.close(fig)
 
 
+def plot_nl2sql_stages(results: Dict[str, Dict], path: Path) -> None:
+    """Valid SQL and execution accuracy after each NL2SQL pipeline stage, one bar group per generator."""
+    plt = _plt()
+    stages = [("raw", "Raw top-1"), ("selected", "+ verify & select"), ("final", "+ repair (full)")]
+    short = {"Qwen2.5-Coder-0.5B-Instruct": "Qwen2.5-Coder-0.5B", "t5-small-awesome-text-to-sql": "T5-small"}
+    names = [short.get(g.split("/")[-1], g.split("/")[-1]) for g in results]
+    fig, axes = plt.subplots(1, 2, figsize=(8, 3.4), sharey=True)
+    width = 0.8 / len(stages)
+    x = np.arange(len(names))
+    for ax, (metric, label) in zip(axes, [("validity", "Valid SQL"), ("execution_accuracy", "Execution accuracy")]):
+        for k, (key, stage) in enumerate(stages):
+            vals = [100 * v[f"{key}_{metric}"] for v in results.values()]
+            bars = ax.bar(x + (k - 1) * width, vals, width, label=stage, color=PALETTE[k % len(PALETTE)])
+            ax.bar_label(bars, fmt="%.1f", fontsize=7, padding=1)
+        ax.set_xticks(x)
+        ax.set_xticklabels(names, fontsize=8)
+        ax.set_title(label, fontsize=10)
+        ax.set_ylim(0, 100)
+        ax.grid(axis="y", alpha=0.25)
+    axes[0].set_ylabel("% of 150 questions")
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=len(stages), frameon=False, fontsize=8)
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+
+
 def plot_reliability(y_true: Sequence[int], probs: np.ndarray, title: str, path: Path, bins: int = 10) -> None:
     plt = _plt()
     conf = probs.max(1)
