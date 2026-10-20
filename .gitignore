@@ -29,3 +29,9 @@ frontend/dist/
 frontend/test-results/
 frontend/playwright-report/
 frontend/coverage/
+
+# course submission material (kept outside the repo)
+docs/case_study/
+reports/ieee/
+declaration_of_publication.docx
+cb.sc.*.pdf

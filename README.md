@@ -245,8 +245,7 @@ configs/           training / API / UI configuration
 scripts/           model download, public demo link, Hugging Face deployment
 data/processed/    generated dataset (jsonl/csv), schemas.json, dataset report
 docs/design/       original research and design documents
-docs/case_study/   case-study report (Word) and presentation (PowerPoint)
-reports/           evaluation results and figures; reports/ieee/ has the IEEE-format paper
+reports/           evaluation results and figures
 tests/             pytest suite (python -m pytest)
 ```
 

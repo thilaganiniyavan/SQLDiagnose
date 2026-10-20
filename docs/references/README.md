@@ -1,6 +1,6 @@
 # Referenced papers
 
-PDFs of the papers cited in the IEEE paper (`reports/ieee/`), numbered as in its reference list.
+PDFs of the papers cited in the SQLDiagnose paper, numbered as in its reference list.
 All were downloaded from arXiv.
 
 | # | File | Paper | Venue |

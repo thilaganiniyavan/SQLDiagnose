@@ -20,7 +20,7 @@ from huggingface_hub import HfApi
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_DB_DIR = ROOT / "data" / "raw" / "spider_data" / "database"
-EXCLUDE = ("docs/case_study/", "reports/ieee/", "notebooks/")   # not needed by the running app
+EXCLUDE = ("notebooks/",)   # not needed by the running app
 
 SPACE_CARD = """---
 title: SQLDiagnose
