@@ -132,7 +132,7 @@
      0.5368811360765027
     ]
    },
-   "train_seconds": 61.17518639564514
+   "train_seconds": 66.2332353591919
   },
   "CodeBERTa-small-v1": {
    "accuracy": 0.8742857142857143,
@@ -260,7 +260,7 @@
      0.8920348057929145
     ]
    },
-   "throughput_qps": 1.940241924256327,
+   "throughput_qps": 2.334110496457354,
    "per_operator": {
     "AMBIGUOUS_REFERENCE/amb_duplicate_alias": {
      "accuracy": 0.9795918367346939,
@@ -502,7 +502,7 @@
      0.4890335977720795
     ]
    },
-   "throughput_qps": 4.029840789287362,
+   "throughput_qps": 4.914898315842358,
    "per_operator": {
     "AMBIGUOUS_REFERENCE/amb_duplicate_alias": {
      "accuracy": 0.5816326530612245,
@@ -621,11 +621,11 @@
  },
  "main_model": "CodeBERTa-small-v1",
  "latency": {
-  "mean_ms": 343.4002403494863,
-  "p95_ms": 574.1833206462614
+  "mean_ms": 332.8423455332086,
+  "p95_ms": 559.2591324977545
  },
  "training_curve": true,
- "analyzer_latency_ms": 0.9636269828583214,
+ "analyzer_latency_ms": 0.8670194157145618,
  "significance": {
   "CodeBERTa-small-v1 vs TF-IDF": {
    "only_a": 525,
@@ -707,12 +707,12 @@
  "repair": {
   "AMBIGUOUS_REFERENCE": {
    "n": 200,
-   "verified_rate": 0.9,
+   "verified_rate": 0.93,
    "exact_rate": 0.84
   },
   "ALL": {
    "n": 1200,
-   "verified_rate": 0.8633333333333333,
+   "verified_rate": 0.8791666666666667,
    "exact_rate": 0.6341666666666667
   },
   "AMBIGUOUS_REFERENCE/amb_unqualify": {
@@ -732,7 +732,7 @@
   },
   "SEMANTIC_ERROR": {
    "n": 200,
-   "verified_rate": 0.93,
+   "verified_rate": 0.995,
    "exact_rate": 0.31
   },
   "SEMANTIC_ERROR/sem_ungrouped_column": {
@@ -827,7 +827,7 @@
   },
   "SEMANTIC_ERROR/sem_aggregate_in_where": {
    "n": 40,
-   "verified_rate": 0.675,
+   "verified_rate": 1.0,
    "exact_rate": 0.0
   },
   "SYNTAX_ERROR/syn_unclosed_quote": {
@@ -867,7 +867,7 @@
   },
   "AMBIGUOUS_REFERENCE/amb_self_join": {
    "n": 20,
-   "verified_rate": 0.2,
+   "verified_rate": 0.5,
    "exact_rate": 0.0
   },
   "SEMANTIC_ERROR/sem_set_op_arity": {
@@ -876,8 +876,8 @@
    "exact_rate": 1.0
   },
   "latency_ms": {
-   "mean": 33.4841663998183,
-   "p95": 214.80626805132445
+   "mean": 32.93558738093149,
+   "p95": 210.22344175089518
   }
  },
  "generator": "Qwen/Qwen2.5-Coder-0.5B-Instruct",
