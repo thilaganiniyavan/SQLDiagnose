@@ -43,7 +43,7 @@ Measured on 1,400 test queries from 20 Spider databases that never appear in tra
 | CodeBERTa-small, query only (ablation) | 47.1 | 47.0 |
 | **CodeBERTa-small, query + schema** (trained on a laptop CPU) | **87.4** | **87.6** |
 
-* **Repair:** 86.3% of erroneous test queries get a verified fix, and 63.4% are restored exactly to the original.
+* **Repair:** 87.9% of erroneous test queries get a verified fix, and 63.4% are restored exactly to the original.
   Syntax and unknown-table errors are 93–96% exact. Mean repair time is 33 ms.
 * **Analyzer:** 96.5% of the 8,034 human-written Spider queries pass; the rest are genuine issues.
   The access-policy check is 100% correct on 400 query/policy pairs.

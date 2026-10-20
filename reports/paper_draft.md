@@ -12,7 +12,7 @@ portable AST rules; it labels a dataset of 9450 queries built by injecting 28 ki
 Spider, keeping only samples whose label the analyzer confirms. A code transformer (CodeBERTa-small, 84M parameters,
 trained on a laptop CPU) that reads the query together with a compact schema description reaches **87.4% accuracy /
 87.6 macro-F1 on databases never seen in training**, against 51.3 for a TF-IDF baseline; without the schema
-input it drops to 47.0. A generate-and-verify repair engine fixes 86.3% of erroneous test
+input it drops to 47.0. A generate-and-verify repair engine fixes 87.9% of erroneous test
 queries (restoring the exact original in 63.4%), and wrapping a small text-to-SQL model with
 verification and repair raises valid SQL from 54.0% to 88.0% and execution accuracy from
 40.0% to 54.7% for a 0.5B-parameter code LLM running on CPU.
@@ -110,9 +110,9 @@ matching against a short list of table names, are recognised almost perfectly.
 | UNKNOWN_TABLE | 97.5 | 95.5 |
 | UNKNOWN_COLUMN | 79.0 | 68.0 |
 | DATATYPE_MISMATCH | 60.5 | 9.0 |
-| AMBIGUOUS_REFERENCE | 90.0 | 84.0 |
-| SEMANTIC_ERROR | 93.0 | 31.0 |
-| ALL | 86.3 | 63.4 |
+| AMBIGUOUS_REFERENCE | 93.0 | 84.0 |
+| SEMANTIC_ERROR | 99.5 | 31.0 |
+| ALL | 87.9 | 63.4 |
 
 Grammar and table errors are almost always restored exactly. DATATYPE_MISMATCH has low exact recovery by design:
 the intended value behind `age > 'young'` cannot be inferred, and the engine only repairs when it can (`'5'`,
