@@ -16,7 +16,7 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.errors import SqlglotError
 
-from analysis.analyzer import SQLAnalyzer, normalize_query
+from analysis.analyzer import SQLAnalyzer, _contains_aggregate, normalize_query
 from analysis.schema import NUMBER, TEXT, DatabaseSchema
 from data_pipeline.sql_text import CLAUSE_TYPES, NAME_TYPES, SQLText, Tok
 from models.domain.entities import AnalysisResult, Issue, RepairResult, RepairStep
@@ -110,7 +110,7 @@ def _edit_size(a: str, b: str) -> int:
 
 
 class SQLRepairEngine:
-    def __init__(self, analyzer: Optional[SQLAnalyzer] = None, max_rounds: int = 5):
+    def __init__(self, analyzer: Optional[SQLAnalyzer] = None, max_rounds: Optional[int] = None):
         self.analyzer = analyzer or SQLAnalyzer()
         self.max_rounds = max_rounds
         self._generators = {
@@ -129,9 +129,13 @@ class SQLRepairEngine:
         analysis = self.analyzer.analyze(current, schema)
         steps: List[RepairStep] = []
         notes: List[str] = []
-        for _ in range(self.max_rounds):
-            if not analysis.is_error:
-                break
+        seen = {current}
+        # repair until verified, stuck or cycling; each step fixes at least one token, so the token
+        # count bounds the loop unless the caller imposes a tighter max_rounds
+        limit = len(re.findall(r"\w+|\S", current))
+        if self.max_rounds is not None:
+            limit = min(limit, self.max_rounds)
+        while analysis.is_error and len(steps) < limit:
             issue = analysis.issues[0]
             if issue.error_class == "PERMISSION_DENIED":
                 notes.append(f"{issue.message} Access-policy violations cannot be repaired automatically; "
@@ -142,6 +146,10 @@ class SQLRepairEngine:
                 notes.append(f"No verified fix found for: {issue.message}")
                 break
             new_sql, desc, new_analysis = best
+            if new_sql in seen:
+                notes.append(f"Repairs started repeating; stopped at: {issue.message}")
+                break
+            seen.add(new_sql)
             steps.append(RepairStep(issue.error_class, desc, current, new_sql))
             current, analysis = new_sql, new_analysis
 
@@ -157,7 +165,7 @@ class SQLRepairEngine:
             return None
         candidates = self._dedupe(gen(sql, schema, issue))
         before_rank = self._rank(before)
-        scored = []
+        scored, unmasked = [], []
         for cand, desc, pref in candidates:
             cand = normalize_query(cand)
             if not cand or cand == sql:
@@ -166,15 +174,31 @@ class SQLRepairEngine:
             if any(i.message == issue.message for i in res.issues):
                 continue                                  # targeted issue still present
             rank = self._rank(res)
-            if rank < before_rank:
-                continue                                  # introduced a more severe error
-            scored.append(((0 if not res.is_error else 1, pref, -rank, len(res.issues), _edit_size(sql, cand)),
-                           cand, desc, res))
+            key = (0 if not res.is_error else 1, pref, -rank, len(res.issues), _edit_size(sql, cand))
+            if rank >= before_rank:
+                scored.append((key, cand, desc, res))
+            elif self._only_unmasked(sql, before_rank, res):
+                unmasked.append((key, cand, desc, res))   # a hidden error surfaced; fixed in a later round
+            # otherwise the edit introduced a more severe error
+        scored = scored or unmasked
         if not scored:
             return None
         scored.sort(key=lambda x: x[0])
         _, cand, desc, res = scored[0]
         return cand, desc, res
+
+    @staticmethod
+    def _only_unmasked(sql: str, before_rank: int, res: AnalysisResult) -> bool:
+        """True when every more severe issue in `res` names a token already in `sql`.
+
+        The engine reports one error at a time, so fixing it can surface another one (e.g. a misspelled
+        column behind a misplaced HAVING) that the edit did not introduce.
+        """
+        worse = [i for i in res.issues if PRIORITY.index(i.error_class) < before_rank]
+        words = {w.lower() for w in re.findall(r"\w+", sql)}
+        return bool(worse) and all(i.token and re.findall(r"\w+", i.token)
+                                   and words.issuperset(w.lower() for w in re.findall(r"\w+", i.token))
+                                   for i in worse)
 
     @staticmethod
     def _rank(analysis: AnalysisResult) -> int:
@@ -556,14 +580,8 @@ class SQLRepairEngine:
             cands.extend(self._fix_aggregate_in_where(tree))
         if ("must appear in GROUP BY" in msg or "not in a GROUP BY" in msg or "neither grouped" in msg) and tree is not None:
             cands.extend(self._fix_grouping(tree, issue))
-        if "HAVING is used without GROUP BY" in msg and tree is not None:
-            new = tree.copy()
-            for sel in new.find_all(exp.Select):
-                having = sel.args.get("having")
-                if having is not None and sel.args.get("group") is None:
-                    sel.set("having", None)
-                    sel.where(having.this.copy(), copy=False)
-            cands.append((new.sql(dialect="sqlite"), "Turned HAVING (no aggregate) into WHERE"))
+        if tree is not None:
+            cands.extend(self._fix_having_to_where(tree))  # no-op unless the query has an ungrouped HAVING
         if "Cartesian product" in msg:
             cands.extend(self._fix_join_condition(sql, schema, issue))
         if msg.startswith("Function '") or "no such function" in msg.lower():
@@ -588,6 +606,23 @@ class SQLRepairEngine:
         if ("non-aggregate query" in msg or msg.lower().startswith("misuse of aggregate")) and tree is not None:
             cands.extend(self._add_group_by(tree))
         return cands
+
+    @staticmethod
+    def _fix_having_to_where(tree: exp.Expression) -> List[Candidate]:
+        # HAVING filters groups; with no GROUP BY and no aggregate it is just a row filter, i.e. WHERE
+        new = tree.copy()
+        changed = False
+        for sel in new.find_all(exp.Select):
+            having = sel.args.get("having")
+            if having is not None and sel.args.get("group") is None and not _contains_aggregate(having):
+                sel.set("having", None)
+                sel.where(having.this.copy(), copy=False)
+                changed = True
+        if not changed:
+            return []
+        return [(new.sql(dialect="sqlite"),
+                 "HAVING filters groups and needs GROUP BY or an aggregate; this condition filters rows, "
+                 "so it was moved to WHERE")]
 
     @staticmethod
     def _fix_order_position(tree: exp.Expression) -> List[Candidate]:

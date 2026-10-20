@@ -22,6 +22,9 @@ CASES = [
     ("SELECT name FROM singer WHERE age = NULL", "SELECT name FROM singer WHERE age IS NULL"),
     ("SELECT name FROM singer WHERE age <> NULL", "SELECT name FROM singer WHERE NOT age IS NULL"),
     ("SELECT cnt(*) FROM singer", "SELECT count(*) FROM singer"),
+    ("SELECT name FROM singer HAVING age > 30", "SELECT name FROM singer WHERE age > 30"),
+    ("SELECSELECT * FROM singer HAVING age > 30", "SELECT * FROM singer WHERE age > 30"),
+    ("SELECT name FROM singer HAVING agee > 30", "SELECT name FROM singer WHERE age > 30"),
     ("SELECT country, name, count(*) FROM singer GROUP BY country",
      "SELECT country, name, COUNT(*) FROM singer GROUP BY country, name"),
 ]
